@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useRef, useState, FormEvent, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import Layout from '../../components/Layout';
@@ -23,130 +23,410 @@ interface Sale {
   Customer?: { name: string };
 }
 
+// ─── Sale Modal ─────────────────────────────────────────────────────────────
+interface SaleModalProps {
+  products: Product[];
+  territories: Territory[];
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const emptyForm = {
+  productId: '', territoryId: '', revenue: '', deals: '',
+  quantity: '', saleDate: '', month: '', year: '',
+  customerName: '', customerIndustry: '', customerContact: '',
+};
+
+function SaleRecordModal({ products, territories, onClose, onSuccess }: SaleModalProps) {
+  const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Close on overlay click
+  const handleOverlay = (e: React.MouseEvent) => {
+    if (e.target === overlayRef.current) onClose();
+  };
+
+  const f = (key: keyof typeof emptyForm) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm(prev => ({ ...prev, [key]: e.target.value }));
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true); setError('');
+    try {
+      await client.post('/api/sales', {
+        ...form,
+        month: parseInt(form.month),
+        year: parseInt(form.year),
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to create sale. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      ref={overlayRef}
+      onClick={handleOverlay}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
+    >
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 shadow-2xl"
+        style={{ background: 'rgba(15,23,42,0.97)' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div>
+            <h2 className="text-text-primary font-bold text-base">New Sale Record</h2>
+            <p className="text-text-subtle text-xs mt-0.5">Fill in the details to log a new sale</p>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors text-lg leading-none">
+            ×
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={submit} className="px-6 py-5">
+          {error && (
+            <div className="mb-4 px-4 py-2.5 rounded-lg text-sm text-red-400 border border-red-500/30"
+              style={{ background: 'rgba(239,68,68,0.08)' }}>
+              ❌ {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Product */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Product</label>
+              <select id="modal-product" className="input" value={form.productId} onChange={f('productId')} required>
+                <option value="">Select Product</option>
+                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            {/* Territory */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Territory</label>
+              <select id="modal-territory" className="input" value={form.territoryId} onChange={f('territoryId')} required>
+                <option value="">Select Territory</option>
+                {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+
+            {/* Revenue */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Revenue ($)</label>
+              <input id="modal-revenue" className="input" placeholder="0.00" type="number" step="0.01" min="0"
+                value={form.revenue} onChange={f('revenue')} required />
+            </div>
+
+            {/* Deals */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Deals</label>
+              <input id="modal-deals" className="input" placeholder="0" type="number" min="0"
+                value={form.deals} onChange={f('deals')} required />
+            </div>
+
+            {/* Quantity */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Quantity</label>
+              <input id="modal-quantity" className="input" placeholder="0" type="number" min="0"
+                value={form.quantity} onChange={f('quantity')} required />
+            </div>
+
+            {/* Date */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Sale Date</label>
+              <input id="modal-date" className="input" type="date"
+                value={form.saleDate}
+                onChange={e => {
+                  const d = new Date(e.target.value);
+                  setForm(prev => ({
+                    ...prev, saleDate: e.target.value,
+                    month: String(d.getMonth() + 1),
+                    year: String(d.getFullYear()),
+                  }));
+                }}
+                required />
+            </div>
+
+            {/* Customer Name */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Customer Name</label>
+              <input id="modal-customer" className="input" placeholder="e.g. Apollo Hospitals"
+                value={form.customerName} onChange={f('customerName')} required />
+            </div>
+
+            {/* Industry */}
+            <div className="flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Industry</label>
+              <input id="modal-industry" className="input" placeholder="e.g. Healthcare"
+                value={form.customerIndustry} onChange={f('customerIndustry')} />
+            </div>
+
+            {/* Contact */}
+            <div className="col-span-2 flex flex-col gap-1">
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Contact</label>
+              <input id="modal-contact" className="input" placeholder="Phone or email"
+                value={form.customerContact} onChange={f('customerContact')} />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-white/10">
+            <button type="button" onClick={onClose} className="btn-secondary py-2 text-sm">
+              Cancel
+            </button>
+            <button id="modal-submit" type="submit" disabled={submitting} className="btn-primary py-2 text-sm">
+              {submitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-black/40 border-t-black rounded-full animate-spin" />
+                  Saving…
+                </span>
+              ) : '💾 Save Sale'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pagination Controls ─────────────────────────────────────────────────────
+interface PaginationProps {
+  page: number; totalPages: number; total: number;
+  onPage: (p: number) => void;
+}
+function Pagination({ page, totalPages, total, onPage }: PaginationProps) {
+  if (totalPages <= 1) return null;
+  const pages = Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+    if (totalPages <= 7) return i + 1;
+    if (page <= 4) return i + 1;
+    if (page >= totalPages - 3) return totalPages - 6 + i;
+    return page - 3 + i;
+  });
+  return (
+    <div className="flex items-center justify-between px-4 py-2.5 border-t border-bg-border">
+      <span className="text-text-subtle text-xs">{total} record{total !== 1 ? 's' : ''}</span>
+      <div className="flex items-center gap-1">
+        <button onClick={() => onPage(page - 1)} disabled={page === 1}
+          className="px-2.5 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+          ← Prev
+        </button>
+        {pages.map(p => (
+          <button key={p} onClick={() => onPage(p)}
+            className={`w-7 h-7 rounded text-xs font-medium transition-colors ${p === page
+              ? 'bg-accent text-black'
+              : 'text-text-muted hover:text-text-primary hover:bg-bg-hover'}`}>
+            {p}
+          </button>
+        ))}
+        <button onClick={() => onPage(page + 1)} disabled={page === totalPages}
+          className="px-2.5 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+          Next →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Dashboard ──────────────────────────────────────────────────────────
 export default function SalesDashboard() {
   const [dash, setDash] = useState<DashData | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [territories, setTerritories] = useState<Territory[]>([]);
-  const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [toast, setToast] = useState('');
 
-  const emptyForm = { productId: '', revenue: '', territoryId: '', saleDate: '', month: '', year: '', deals: '', quantity: '', customerName: '', customerIndustry: '', customerLocation: '', customerContact: '' };
-  const [form, setForm] = useState(emptyForm);
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 4000);
+  };
+
+  const fetchSales = useCallback(async (p = page) => {
+    const sr = await client.get(`/api/sales?page=${p}&limit=5`);
+    setSales(sr.data.sales || []);
+    setTotal(sr.data.total || 0);
+    setTotalPages(sr.data.pages || 1);
+  }, [page]);
 
   const fetchAll = async () => {
     setLoading(true);
     const [dr, sr, pr, tr] = await Promise.all([
       client.get('/api/dashboard/sales'),
-      client.get('/api/sales'),
+      client.get('/api/sales?page=1&limit=5'),
       client.get('/api/sales/products').catch(() => ({ data: [] })),
       client.get('/api/sales/territories').catch(() => ({ data: [] })),
     ]);
-    setDash(dr.data); setSales(sr.data.sales || []); setProducts(pr.data); setTerritories(tr.data);
+    setDash(dr.data);
+    setSales(sr.data.sales || []);
+    setTotal(sr.data.total || 0);
+    setTotalPages(sr.data.pages || 1);
+    setPage(1);
+    setProducts(pr.data);
+    setTerritories(tr.data);
     setLoading(false);
   };
 
   useEffect(() => { fetchAll(); }, []);
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault(); setSubmitting(true); setMsg('');
-    try {
-      await client.post('/api/sales', { ...form, month: parseInt(form.month), year: parseInt(form.year) });
-      setMsg('✅ Sale recorded successfully!'); setForm(emptyForm); setShowForm(false); fetchAll();
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      setMsg(`❌ ${err.response?.data?.message || 'Failed to create sale'}`);
-    } finally { setSubmitting(false); }
+  const handlePageChange = (p: number) => {
+    setPage(p);
+    fetchSales(p);
+  };
+
+  const handleSaleSuccess = () => {
+    setShowModal(false);
+    setPage(1);
+    fetchAll();
+    showToast('✅ Sale recorded successfully!');
   };
 
   return (
-    <Layout title="My Dashboard" subtitle="Personal Sales Performance &amp; Records">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        {[
-          { label: 'My Revenue', value: loading ? '—' : `$${Number(dash?.totalRevenue || 0).toLocaleString()}` },
-          { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0 },
-          { label: 'Avg Deal Size', value: loading ? '—' : `$${Number(dash?.averageDealSize || 0).toFixed(0)}` },
-        ].map(c => (
-          <div key={c.label} className="stat-card card-hover">
-            <span className="stat-card-label">{c.label}</span>
-            <span className="stat-card-value">{c.value}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Monthly Trend */}
-      <div className="card mb-6">
-        <h3 className="text-text-primary font-semibold mb-4">Monthly Revenue Trend</h3>
-        <div className="h-40">
-          {!loading && (
-            <Line data={{
-              labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month - 1]} ${m.year}`) || [],
-              datasets: [{ label: 'Revenue', data: dash?.monthlyTrend.map(m => m.revenue) || [], borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,0.1)', tension: 0.4, fill: true, pointBackgroundColor: '#eab308' }]
-            }} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
-          )}
-        </div>
-      </div>
-
-      {/* Add Sale */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-text-primary font-semibold">My Sales Records</h3>
-        <button id="toggle-add-sale" onClick={() => setShowForm(s => !s)} className="btn-primary py-1.5 text-xs">
-          {showForm ? 'Cancel' : '+ Add Sale'}
-        </button>
-      </div>
-
-      {msg && <p className="mb-4 text-sm" style={{ color: msg.startsWith('✅') ? '#22c55e' : '#ef4444' }}>{msg}</p>}
-
-      {showForm && (
-        <div className="card mb-6 animate-slide-in">
-          <h4 className="text-text-primary font-semibold mb-4">New Sale Record</h4>
-          <form id="add-sale-form" onSubmit={submit} className="grid grid-cols-2 gap-3">
-            <select id="sale-product" className="input" value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value }))} required>
-              <option value="">Select Product</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <select id="sale-territory" className="input" value={form.territoryId} onChange={e => setForm(f => ({ ...f, territoryId: e.target.value }))} required>
-              <option value="">Select Territory</option>
-              {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-            <input className="input" placeholder="Revenue" type="number" step="0.01" value={form.revenue} onChange={e => setForm(f => ({ ...f, revenue: e.target.value }))} required />
-            <input className="input" placeholder="Deals" type="number" value={form.deals} onChange={e => setForm(f => ({ ...f, deals: e.target.value }))} required />
-            <input className="input" placeholder="Quantity" type="number" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} required />
-            <input className="input" type="date" value={form.saleDate} onChange={e => { const d = new Date(e.target.value); setForm(f => ({ ...f, saleDate: e.target.value, month: String(d.getMonth() + 1), year: String(d.getFullYear()) })) }} required />
-            <input className="input" placeholder="Customer Name" value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} required />
-            <input className="input" placeholder="Industry" value={form.customerIndustry} onChange={e => setForm(f => ({ ...f, customerIndustry: e.target.value }))} />
-            <input className="input" placeholder="Location" value={form.customerLocation} onChange={e => setForm(f => ({ ...f, customerLocation: e.target.value }))} />
-            <input className="input" placeholder="Contact" value={form.customerContact} onChange={e => setForm(f => ({ ...f, customerContact: e.target.value }))} />
-            <button id="submit-sale" type="submit" disabled={submitting} className="btn-primary col-span-2 justify-center">
-              {submitting ? 'Saving...' : 'Add Sale Record'}
-            </button>
-          </form>
+    <Layout title="My Dashboard" subtitle="Personal Sales Performance & Records">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-[9999] max-w-xs px-4 py-3 rounded-xl text-sm text-white shadow-2xl border border-white/10"
+          style={{ background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(8px)' }}>
+          {toast}
         </div>
       )}
 
-      {/* Sales Table */}
-      <div className="card">
-        <div className="table-wrapper">
-          <table className="table">
-            <thead><tr><th className="th">Date</th><th className="th">Product</th><th className="th">Territory</th><th className="th">Revenue</th><th className="th">Deals</th><th className="th">Customer</th></tr></thead>
-            <tbody>
-              {sales.map(s => (
-                <tr key={s.id} className="tr-hover">
-                  <td className="td text-text-muted text-xs">{new Date(s.saleDate).toLocaleDateString()}</td>
-                  <td className="td">{s.Product?.name ?? '—'}</td>
-                  <td className="td">{s.Territory?.name ?? '—'}</td>
-                  <td className="td text-accent font-semibold">${parseFloat(s.revenue).toLocaleString()}</td>
-                  <td className="td">{s.deals}</td>
-                  <td className="td text-text-muted">{s.Customer?.name ?? '—'}</td>
+      {/* Modal */}
+      {showModal && (
+        <SaleRecordModal
+          products={products}
+          territories={territories}
+          onClose={() => setShowModal(false)}
+          onSuccess={handleSaleSuccess}
+        />
+      )}
+
+      {/* ── Viewport-locked layout ─────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
+
+        {/* KPI Cards — fixed height */}
+        <div className="grid grid-cols-3 gap-4 flex-shrink-0">
+          {[
+            { label: 'My Revenue', value: loading ? '—' : `$${Number(dash?.totalRevenue || 0).toLocaleString()}` },
+            { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0 },
+            { label: 'Avg Deal Size', value: loading ? '—' : `$${Number(dash?.averageDealSize || 0).toFixed(0)}` },
+          ].map(c => (
+            <div key={c.label} className="stat-card card-hover">
+              <span className="stat-card-label">{c.label}</span>
+              <span className="stat-card-value">{c.value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Monthly Trend Chart — fixed height */}
+        <div className="card flex-shrink-0">
+          <h3 className="text-text-primary font-semibold mb-3">Monthly Revenue Trend</h3>
+          <div className="h-36">
+            {!loading && (
+              <Line data={{
+                labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month - 1]} ${m.year}`) || [],
+                datasets: [{
+                  label: 'Revenue',
+                  data: dash?.monthlyTrend.map(m => m.revenue) || [],
+                  borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,0.1)',
+                  tension: 0.4, fill: true, pointBackgroundColor: '#eab308',
+                }],
+              }} options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
+                  y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
+                },
+              }} />
+            )}
+          </div>
+        </div>
+
+        {/* Sales Records — flex-1, no external scroll */}
+        <div className="card flex flex-col min-h-0 flex-1 overflow-hidden p-0">
+          {/* Table header */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-bg-border flex-shrink-0">
+            <div>
+              <h3 className="text-text-primary font-semibold">My Sales Records</h3>
+              {!loading && <p className="text-text-subtle text-xs mt-0.5">{total} total records</p>}
+            </div>
+            <button id="open-sale-modal" onClick={() => setShowModal(true)}
+              className="btn-primary py-1.5 text-xs">
+              + Add Sale
+            </button>
+          </div>
+
+          {/* Table — fixed height, NO internal scroll, exactly 5 rows */}
+          <div className="overflow-hidden">
+            <table className="table">
+              <thead className="sticky top-0 z-10" style={{ background: '#0d1117' }}>
+                <tr>
+                  <th className="th">Date</th>
+                  <th className="th">Product</th>
+                  <th className="th">Territory</th>
+                  <th className="th">Revenue</th>
+                  <th className="th">Deals</th>
+                  <th className="th">Customer</th>
                 </tr>
-              ))}
-              {sales.length === 0 && !loading && (
-                <tr><td colSpan={6} className="td text-center text-text-muted py-8">No sales records yet. Add your first sale!</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6} className="td text-center text-text-muted py-10">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                      Loading…
+                    </div>
+                  </td></tr>
+                ) : sales.length === 0 ? (
+                  <tr><td colSpan={6} className="td text-center text-text-muted py-10">
+                    No sales records yet.{' '}
+                    <button onClick={() => setShowModal(true)} className="text-accent hover:underline">
+                      Add your first sale
+                    </button>
+                  </td></tr>
+                ) : (
+                  sales.map(s => (
+                    <tr key={s.id} className="tr-hover">
+                      <td className="td text-text-muted text-xs">{new Date(s.saleDate).toLocaleDateString()}</td>
+                      <td className="td">{s.Product?.name ?? '—'}</td>
+                      <td className="td">{s.Territory?.name ?? '—'}</td>
+                      <td className="td text-accent font-semibold">${parseFloat(s.revenue).toLocaleString()}</td>
+                      <td className="td">{s.deals}</td>
+                      <td className="td text-text-muted">{s.Customer?.name ?? '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Spacer — pushes pagination to the very bottom of the card */}
+          <div className="flex-1" />
+
+          {/* Pagination — always pinned to bottom of card */}
+          <div className="flex-shrink-0 border-t border-bg-border">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              onPage={handlePageChange}
+            />
+          </div>
         </div>
       </div>
     </Layout>

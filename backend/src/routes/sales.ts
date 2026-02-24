@@ -22,7 +22,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       quantity,
       customerName,
       customerIndustry,
-      customerLocation,
       customerContact,
     } = req.body;
 
@@ -47,7 +46,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       id: customerId,
       name: customerName,
       industry: customerIndustry || null,
-      location: customerLocation || null,
       contact: customerContact || null,
     });
 
@@ -91,7 +89,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 // GET /api/sales — get sales (SALES role: own only; ADMIN: all)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const page = parseInt((req.query.page as string) || '1');
-  const limit = parseInt((req.query.limit as string) || '20');
+  const limit = parseInt((req.query.limit as string) || '5');
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
