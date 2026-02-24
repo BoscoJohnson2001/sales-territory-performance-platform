@@ -177,22 +177,53 @@ export default function MapPage() {
       mkLayerRef.current?.remove();
       highlightRef.current = null;
 
-      // Centroid marker layer (heatmap-OFF)
+
+      // Centroid marker layer (heatmap-OFF) — only districts WITH sales data
       const mkGroup = L.layerGroup();
       tmapRef.current.forEach(t => {
         if (!t.latitude || !t.longitude) return;
-        const mk = L.circleMarker([t.latitude, t.longitude], {
-          radius: 5, fillColor: FILL[t.revenueLevel],
-          color: '#fff', weight: 1.5, fillOpacity: 0.9, opacity: 1,
+        // ── Only show markers where there is actual sales activity ──
+        if (t.revenue === 0 && t.deals === 0) return;
+
+        const color = FILL[t.revenueLevel];
+        const isHigh = t.revenueLevel === 'HIGH';
+
+        const icon = L.divIcon({
+          className: '',
+          iconSize: [22, 28],
+          iconAnchor: [11, 28],
+          popupAnchor: [0, -28],
+          html: `
+            <div style="position:relative;width:22px;height:28px">
+              ${isHigh ? `<div style="
+                position:absolute;top:50%;left:50%;
+                transform:translate(-50%,-60%);
+                width:28px;height:28px;border-radius:50%;
+                background:${color}44;
+                animation:mapPulse 1.6s ease-out infinite;
+              "></div>` : ''}
+              <svg viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg"
+                style="width:22px;height:28px;filter:drop-shadow(0 2px 6px ${color}88)">
+                <path d="M11 0C4.925 0 0 4.925 0 11c0 7.667 11 17 11 17s11-9.333 11-17C22 4.925 17.075 0 11 0z"
+                  fill="${color}" />
+                <circle cx="11" cy="11" r="4.5" fill="white" fill-opacity="0.92"/>
+              </svg>
+            </div>`,
         });
-        mk.bindTooltip(`<b>${t.name}</b><br/>$${t.revenue.toLocaleString()}`,
-          { className: 'map-tooltip', direction: 'auto' });
-        mk.on('click', () => setSelected({
-          ...t, displayName: t.name, geoState: t.state,
-        }));
+
+        const mk = L.marker([t.latitude, t.longitude], { icon });
+        mk.bindTooltip(
+          `<div style="font-weight:700;font-size:13px">${t.name}</div>` +
+          `<div style="font-size:11px;opacity:.7">${t.state}</div>` +
+          `<div style="margin-top:4px">Revenue: <b>$${t.revenue.toLocaleString()}</b></div>` +
+          `<div>Deals: ${t.deals}</div>`,
+          { className: 'map-tooltip', direction: 'auto' }
+        );
+        mk.on('click', () => setSelected({ ...t, displayName: t.name, geoState: t.state }));
         mkGroup.addLayer(mk);
       });
       mkLayerRef.current = mkGroup;
+
 
       // GeoJSON polygon layer
       let withData = 0;

@@ -168,3 +168,21 @@ body,
   background: #334155 !important;
   color: #f1f5f9 !important;
 }
+
+/* ── Map pin pulse animation (HIGH-revenue markers) ─────────────────────── */
+@keyframes mapPulse {
+  0% {
+    transform: translate(-50%, -60%) scale(0.8);
+    opacity: 0.8;
+  }
+
+  70% {
+    transform: translate(-50%, -60%) scale(2.0);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translate(-50%, -60%) scale(2.0);
+    opacity: 0;
+  }
+}

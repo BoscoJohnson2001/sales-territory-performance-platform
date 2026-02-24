@@ -95,11 +95,11 @@ router.get(
     const insights = enriched.map((t) => ({
       ...t,
       insight:
-        t.deals > 10 && t.revenue < 50000
-          ? 'PRICING_OPPORTUNITY'
-          : t.revenue > 100000
-            ? 'EXPANSION_CANDIDATE'
-            : null,
+        t.revenue >= 50000
+          ? 'EXPANSION_CANDIDATE'
+          : t.revenue > 0
+            ? 'PRICING_OPPORTUNITY'
+            : 'NO_ACTIVITY',
     }));
 
     const sortedByRevenue = [...insights].sort((a, b) => b.revenue - a.revenue);

@@ -92,7 +92,12 @@ export default function ManagementDashboard() {
                     <td className="td">{t.name}</td>
                     <td className="td text-accent font-semibold">${t.revenue.toLocaleString()}</td>
                     <td className="td">{t.deals}</td>
-                    <td className="td">{t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high">Expand</span> : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium">Pricing</span> : <span className="text-text-subtle text-xs">—</span>}</td>
+                    <td className="td">
+                      {t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high" title="🚀 Expansion Candidate — Revenue ≥ $50K. Strong performer, ready for growth investment.">🚀 Expand</span>
+                        : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium" title="💡 Pricing Opportunity — Active sales but revenue < $50K. Review deal pricing or upsell strategies.">💡 Pricing</span>
+                          : t.insight === 'NO_ACTIVITY' ? <span className="badge-low" title="❄️ Cold — No revenue or deals recorded. Needs immediate attention to activate this territory.">❄️ Cold</span>
+                            : <span className="text-text-subtle text-xs">—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -105,13 +110,19 @@ export default function ManagementDashboard() {
           <h3 className="text-text-primary font-semibold mb-4">📉 Bottom 5 Territories</h3>
           <div className="table-wrapper">
             <table className="table">
-              <thead><tr><th className="th">Territory</th><th className="th">Revenue</th><th className="th">Deals</th></tr></thead>
+              <thead><tr><th className="th">Territory</th><th className="th">Revenue</th><th className="th">Deals</th><th className="th">Signal</th></tr></thead>
               <tbody>
                 {(data?.bottom5Territories || []).map(t => (
                   <tr key={t.territoryId} className="tr-hover">
                     <td className="td">{t.name}</td>
                     <td className="td text-status-low font-semibold">${t.revenue.toLocaleString()}</td>
                     <td className="td">{t.deals}</td>
+                    <td className="td">
+                      {t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high" title="🚀 Expansion Candidate — Revenue ≥ $50K. Strong performer, ready for growth investment.">🚀 Expand</span>
+                        : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium" title="💡 Pricing Opportunity — Active sales but revenue < $50K. Review deal pricing or upsell strategies.">💡 Pricing</span>
+                          : t.insight === 'NO_ACTIVITY' ? <span className="badge-low" title="❄️ Cold — No revenue or deals recorded. Needs immediate attention to activate this territory.">❄️ Cold</span>
+                            : <span className="text-text-subtle text-xs">—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -92,6 +92,7 @@ JWT-based with enum-driven role control. Three roles:
 - Activate / Deactivate users
 - View system-wide dashboards
 - Full India map access
+- **Extended Profile Fields**: display name, phone (E.164 `+` validated), joining date (no future date), work start/end time in local timezone
 
 ### SALES
 - Add Sales Records (territory must be assigned to them — enforced at API level)
@@ -117,23 +118,87 @@ JWT-based with enum-driven role control. Three roles:
 - Fetches ~594-district India GeoJSON from CDN on first load (browser-cached after)
 - Fetches revenue data from `GET /api/map/districts` — merged client-side by district name
 - **Heatmap ON**: filled district polygons — 🟢 HIGH · 🟡 MEDIUM · 🔴 LOW
-- **Heatmap OFF**: neutral gray polygon outlines + centroid markers (coloured by revenue level)
-- Hover tooltip: District name, state, revenue, deals
+- **Heatmap OFF**: neutral gray polygon outlines + SVG teardrop centroid markers (coloured by revenue level, only for districts with actual sales data)
+- Hover tooltip: District name, state, revenue, deals — single tooltip at a time (explicit open/close via `activeTooltipLayerRef`)
 - Click polygon → Territory Performance side panel
 - SALES role: only assigned territories displayed in colour; others faint
 
-**Revenue Level Logic (percentile-based, $0 territories excluded from threshold calc):**
-- HIGH  → top 30% of territories **with** revenue > $0
-- MEDIUM → middle 40%
-- LOW   → bottom 30%; also used for $0-revenue territories (rendered dark/faint)
+---
 
-**Geolocation (enabled via `VITE_ENABLE_GEOLOCATION=true`)**
-1. On page load: `navigator.geolocation.getCurrentPosition()`
-2. Point-in-polygon ray-cast against loaded GeoJSON → find user's district
-3. Fallback: Nominatim reverse geocode if ray-cast fails (boundary gaps)
-4. Map zooms to matched district (`fitBounds`), auto-opens side panel
-5. SALES role: if matched district is not assigned → shows toast, no panel
-6. Graceful degradation: permission denied / timeout → full India view, no panel
+### Heatmap Colour Logic (Percentile-Based)
+
+#### Overview
+The heatmap assigns one of three revenue levels — `HIGH`, `MEDIUM`, or `LOW` — to each district polygon. This classification is computed **backend-side** in `GET /api/map/districts` using only districts that have revenue > $0.
+
+#### Step-by-Step Calculation (`map.ts`)
+
+1. **Fetch all territories + aggregate their sales revenue:**
+   ```
+   Territory → join → Sale → SUM(revenue) per territory
+   ```
+
+2. **Separate non-zero territories:**
+   ```typescript
+   const nonZero = enriched.filter(t => t.revenue > 0);
+   nonZero.sort((a, b) => a.revenue - b.revenue); // ascending
+   ```
+
+3. **Compute percentile thresholds from non-zero set only:**
+   ```typescript
+   const p30 = nonZero[Math.floor(nonZero.length * 0.30)]?.revenue ?? 0;
+   const p70 = nonZero[Math.floor(nonZero.length * 0.70)]?.revenue ?? 0;
+   ```
+
+4. **Assign revenue level to every territory:**
+
+   | Condition | Level | Polygon Fill | Marker Color |
+   |-----------|-------|-------------|--------------|
+   | `revenue === 0` | `LOW` | Dark (`#1e293b`) at low opacity | No marker shown |
+   | `revenue > 0 && revenue <= p30` | `LOW` | `#ef4444` (red) | 🔴 Red teardrop |
+   | `revenue > p30 && revenue <= p70` | `MEDIUM` | `#f59e0b` (amber) | 🟡 Amber teardrop |
+   | `revenue > p70` | `HIGH` | `#22c55e` (green) | 🟢 Green teardrop + pulse ring |
+
+5. **Why exclude $0 territories from threshold calc:**  
+   If $0 territories were included in the sorted array, the 30th/70th percentiles would collapse toward $0, making all active territories appear `HIGH`. Only **territories with actual revenue** define what HIGH/MEDIUM/LOW means.
+
+#### Frontend Rendering (`MapPage.tsx`)
+
+- `styleFeature(feature, isHeatmap)` maps each GeoJSON feature to a Leaflet style object:
+  ```typescript
+  fillColor: allowed ? (hasRev ? FILL[lvl] : '#1e293b') : '#0f172a'
+  fillOpacity: allowed ? (hasRev ? 0.70 : 0.18) : 0.08
+  ```
+  - `allowed` = SALES role check (is this district assigned to the rep?)
+  - `hasRev` = `revenue > 0`
+  - `lvl` = `HIGH | MEDIUM | LOW` from backend response
+
+- Heatmap toggle does **not** re-fetch data — it calls `layer.setStyle()` on every existing GeoJSON layer with the toggled `isHeatmap` boolean. GeoJSON data is cached in `geoDataRef`.
+
+#### Centroid Markers (Heatmap OFF)
+
+```
+Only rendered if: t.revenue > 0 OR t.deals > 0
+```
+- SVG teardrop divIcon, color = `FILL[revenueLevel]`
+- Drop-shadow filter: `drop-shadow(0 2px 6px ${color}88)`
+- HIGH revenue: animated `mapPulse` ring radiates outward at 1.6s loop
+- All others: static teardrop pin with white inner dot
+
+#### Tooltip Behaviour Fix
+Previously `sticky: true` caused multiple tooltips to stack on rapid mouse movement.  
+Fixed via explicit lifecycle management:
+```typescript
+// mouseover
+activeTooltipLayerRef.current?.closeTooltip();   // close previous
+activeTooltipLayerRef.current = e.target;
+e.target.openTooltip();                          // open new
+
+// mouseout
+e.target.closeTooltip();
+activeTooltipLayerRef.current = null;
+```
+
+---
 
 ### Territory Assignment (Admin Dashboard — Territories tab)
 
@@ -143,6 +208,25 @@ JWT-based with enum-driven role control. Three roles:
 - `DELETE /api/admin/sales-users/:id/territories/:tid` — remove single mapping
 - Assignment propagates immediately to map and sales form dropdown
 
+### Admin — Extended Sales Rep Profile Fields
+
+When creating a sales rep (`POST /api/admin/users`), the form and API now accept:
+
+| Field | Validation | Storage |
+|-------|-----------|---------|
+| `displayName` | Optional string | `User.displayName` |
+| `phone` | Must start with `+` | `User.phone` |
+| `joiningDate` | No future dates | `User.joiningDate` (DATE) |
+| `workStartTime` | HH:MM local time | `User.workStartTimeUtc` (DateTime, UTC) |
+| `workEndTime` | HH:MM local time, must be after start | `User.workEndTimeUtc` (DateTime, UTC) |
+| `timezone` | Auto-detected via `Intl.DateTimeFormat().resolvedOptions().timeZone` | Used only for conversion |
+
+**Timezone Conversion (backend `admin.ts`):**
+- Uses `date-fns-tz` → `fromZonedTime(localDateTimeString, timezone)` for reliable UTC conversion
+- Anchor date = `joiningDate` (or today), ensuring DST-boundary accuracy
+- Database stores **only UTC** — never local time
+- Frontend displays using `toLocaleTimeString()` → auto-converts UTC → browser local TZ
+
 ### Sales Data Module (`/sales/dashboard`)
 
 - Sales creation form with product + territory dropdown
@@ -151,12 +235,24 @@ JWT-based with enum-driven role control. Three roles:
 - Territory assignment validated at API level (403 if unassigned)
 
 ### Management Dashboard (`/management/dashboard`)
+
 - Revenue by Region (Doughnut chart)
 - Monthly Revenue Trend (Line chart)
-- Top 5 / Bottom 5 territories table
+- Top 5 / Bottom 5 territories table with **Signal column**
+
+#### Signal Column Logic
+
+| Signal | Condition | Badge |
+|--------|-----------|-------|
+| `EXPANSION_CANDIDATE` | `revenue >= $50,000` | 🚀 Expand (green) |
+| `PRICING_OPPORTUNITY` | `revenue > $0 AND revenue < $50,000` | 💡 Pricing (amber) |
+| `NO_ACTIVITY` | `revenue = $0` | ❄️ Cold (red) |
+
+Each badge has a `title` HTML tooltip explaining the signal in plain English.  
+Signal column appears in **both** Top 5 and Bottom 5 tables.
 
 ### Admin Dashboard (`/admin/dashboard`)
-- **Users tab**: create, activate/deactivate sales reps
+- **Users tab**: create, activate/deactivate sales reps (with extended profile fields)
 - **Products tab**: create products
 - **Territories tab**: assign/unassign territories to sales reps
 
@@ -167,7 +263,7 @@ JWT-based with enum-driven role control. Three roles:
 | Model | Key Fields | Notes |
 |-------|-----------|-------|
 | Role | id, name | Enum: ADMIN, SALES, MANAGEMENT |
-| User | id(UUID), userCode, email, roleId, isActive, isFirstLogin, onboardingToken | unique(email, userCode, onboardingToken) |
+| User | id(UUID), userCode, email, roleId, isActive, isFirstLogin, onboardingToken, displayName, phone, joiningDate, workStartTimeUtc, workEndTimeUtc | unique(email, userCode, onboardingToken) |
 | Territory | id(UUID), name, state, region, latitude, longitude, **radius**(INT), **polygon**(JSONB) | 753 Indian districts seeded |
 | Product | id(UUID), name, category, price | — |
 | Customer | id(UUID), name, industry, location, contact | — |
@@ -175,7 +271,8 @@ JWT-based with enum-driven role control. Three roles:
 | SalesRepTerritory | salesRepId, territoryId, assignedAt | unique(salesRepId, territoryId) |
 
 > `Territory.radius` — approximate district coverage radius in metres (used as fallback)  
-> `Territory.polygon` — GeoJSON geometry; populated by running `importDistrictPolygons.ts`
+> `Territory.polygon` — GeoJSON geometry; populated by running `importDistrictPolygons.ts`  
+> `User.workStartTimeUtc / workEndTimeUtc` — always stored in UTC; converted from local time using `date-fns-tz`
 
 ---
 
@@ -207,7 +304,7 @@ JWT-based with enum-driven role control. Three roles:
 | GET  | `/api/map/territories` | All Auth | City/circle-based revenue map data (legacy) |
 | GET  | `/api/map/districts` | All Auth | **District-level revenue data for choropleth** |
 | GET  | `/api/dashboard/sales` | SALES | Personal KPIs |
-| GET  | `/api/dashboard/management` | MGMT+ADMIN | Regional KPIs |
+| GET  | `/api/dashboard/management` | MGMT+ADMIN | Regional KPIs + Signal column data |
 
 ---
 
@@ -278,3 +375,7 @@ When building, extending, or debugging this platform:
 12. **Dark Theme** — UI base `#08090f` deep navy with yellow-gold `#eab308` accent. Never introduce light-mode overrides.
 13. **Geolocation Safety** — `VITE_ENABLE_GEOLOCATION=false` in `.env` disables auto-detect without code changes. Always handle denied/timeout gracefully (fallback to full India view).
 14. **GeoJSON Caching** — The India district GeoJSON (~15 MB) is fetched once per session and stored in a component ref. Never re-fetch on state change or heatmap toggle.
+15. **UTC-Only Storage** — Working hours are stored in UTC (`workStartTimeUtc`, `workEndTimeUtc`). Always convert via `date-fns-tz → fromZonedTime()`. Use `joiningDate` as anchor. Never store local time in DB.
+16. **Tooltip Exclusivity** — Map tooltips must use the `activeTooltipLayerRef` pattern: explicitly `openTooltip()` / `closeTooltip()` on enter/leave. Never use `sticky: true` as it allows multiple tooltips to stack.
+17. **Signal Thresholds** — Dashboard signals are: `EXPANSION_CANDIDATE` (≥$50K), `PRICING_OPPORTUNITY` (>$0 <$50K), `NO_ACTIVITY` ($0). Adjust these if data ranges change significantly.
+18. **Centroid Markers — Sales Only** — When Heatmap is OFF, centroid markers are only rendered for districts where `revenue > 0 OR deals > 0`. Zero-activity districts get no marker.
