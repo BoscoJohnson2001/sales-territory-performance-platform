@@ -1,0 +1,144 @@
+// ============================================================
+// Prisma Schema — Sales Territory Performance Platform
+// Organization: Pfizer Medical Industries
+// Database: Supabase (PostgreSQL)
+// ORM: Prisma
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ROLE
+// ============================================================
+model Role {
+  id    Int    @id @default(autoincrement())
+  name  String @unique
+  users User[]
+}
+
+// ============================================================
+// USER
+// ============================================================
+model User {
+  id                    String              @id @default(uuid())
+  userCode              String?             @unique
+  firstName             String
+  lastName              String?
+  email                 String              @unique
+  passwordHash          String?
+  roleId                Int
+  role                  Role                @relation(fields: [roleId], references: [id])
+  isActive              Boolean             @default(true)
+  isFirstLogin          Boolean             @default(true)
+  onboardingToken       String?             @unique
+  onboardingTokenExpiry DateTime?
+  createdAt             DateTime            @default(now())
+  sales                 Sale[]
+  territories           SalesRepTerritory[]
+}
+
+// ============================================================
+// TERRITORY
+// ============================================================
+model Territory {
+  id        String              @id @default(uuid())
+  name      String
+  state     String?
+  region    String?
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime            @default(now())
+  sales     Sale[]
+  salesReps SalesRepTerritory[]
+}
+
+// ============================================================
+// PRODUCT
+// ============================================================
+model Product {
+  id        String   @id @default(uuid())
+  name      String
+  category  String?
+  price     Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  sales     Sale[]
+}
+
+// ============================================================
+// CUSTOMER
+// ============================================================
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  industry  String?
+  location  String?
+  contact   String?
+  createdAt DateTime @default(now())
+  sales     Sale[]
+}
+
+// ============================================================
+// SALE (Core Fact Table)
+// ============================================================
+model Sale {
+  id          String    @id @default(uuid())
+  revenue     Decimal   @db.Decimal(12, 2)
+  deals       Int
+  quantity    Int
+  saleDate    DateTime
+  month       Int
+  year        Int
+  territoryId String
+  salesRepId  String
+  productId   String
+  customerId  String
+  createdAt   DateTime  @default(now())
+
+  territory Territory @relation(fields: [territoryId], references: [id])
+  salesRep  User      @relation(fields: [salesRepId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+  customer  Customer  @relation(fields: [customerId], references: [id])
+  invoice   Invoice?
+
+  // Indexes for fast map aggregation & dashboard filtering
+  @@index([territoryId])
+  @@index([salesRepId])
+  @@index([saleDate])
+  @@index([productId])
+}
+
+// ============================================================
+// INVOICE (Optional — Finance Dashboard)
+// ============================================================
+model Invoice {
+  id        String    @id @default(uuid())
+  saleId    String    @unique
+  invoiceNo String?
+  amount    Decimal   @db.Decimal(12, 2)
+  status    String    @default("PENDING")
+  dueDate   DateTime?
+  createdAt DateTime  @default(now())
+  sale      Sale      @relation(fields: [saleId], references: [id])
+}
+
+// ============================================================
+// SALESREPTERRITORY (Many-to-Many Junction)
+// ============================================================
+model SalesRepTerritory {
+  id          String    @id @default(uuid())
+  salesRepId  String
+  territoryId String
+  assignedAt  DateTime  @default(now())
+
+  salesRep  User      @relation(fields: [salesRepId], references: [id])
+  territory Territory @relation(fields: [territoryId], references: [id])
+
+  @@unique([salesRepId, territoryId])
+}
