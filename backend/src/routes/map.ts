@@ -124,20 +124,28 @@ router.get('/districts', async (req: Request, res: Response): Promise<void> => {
       agg[s.territoryId].deals += Number(s.deals || 1);
     }
 
-    // Compute percentile thresholds (top 30% = HIGH, bottom 30% = LOW)
-    const sorted = ((territories || []) as any[])
+    // Compute thresholds ONLY from territories that have revenue > 0.
+    // Using all 753 districts (most with $0) makes p70=p30=0,
+    // so every non-zero territory falsely becomes HIGH.
+    const revenueWithData = ((territories || []) as any[])
       .map(t => agg[t.id]?.revenue || 0)
+      .filter(r => r > 0)
       .sort((a, b) => a - b);
-    const n = sorted.length || 1;
-    const p70 = sorted[Math.floor(n * 0.70)] ?? 0;
-    const p30 = sorted[Math.floor(n * 0.30)] ?? 0;
+    const m = revenueWithData.length || 1;
+    const p70 = revenueWithData[Math.floor(m * 0.70)] ?? 0; // top 30% = HIGH
+    const p30 = revenueWithData[Math.floor(m * 0.30)] ?? 0; // bottom 30% = LOW
 
     const result = ((territories || []) as any[]).map(t => {
       const a = agg[t.id];
       const revenue = a?.revenue || 0;
       const deals = a?.deals || 0;
       const avgDeal = deals > 0 ? Math.round(revenue / deals) : 0;
-      const revenueLevel = revenue >= p70 ? 'HIGH' : revenue >= p30 ? 'MEDIUM' : 'LOW';
+      // $0 territories → 'LOW'; frontend already renders them dark/faint.
+      const revenueLevel =
+        revenue <= 0 ? 'LOW'
+          : revenue >= p70 ? 'HIGH'
+            : revenue >= p30 ? 'MEDIUM'
+              : 'LOW';
       return {
         id: t.id, name: t.name, state: t.state, region: t.region,
         latitude: t.latitude, longitude: t.longitude,

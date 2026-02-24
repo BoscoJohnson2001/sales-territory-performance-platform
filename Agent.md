@@ -2,32 +2,35 @@
 
 ## Project Identity
 
-| Field              | Value                                                         |
-|--------------------|---------------------------------------------------------------|
+| Field              | Value                                                          |
+|--------------------|----------------------------------------------------------------|
 | **Platform Name**  | Sales Territory Performance & Revenue Hotspot Mapping Platform |
-| **Organization**   | Pfizer Medical Industries                                     |
-| **Geography**      | United States — District-Wise                                 |
-| **PRD Version**    | 1.0                                                           |
-| **Project Type**   | Demo-Level Strategic Intelligence Platform                    |
+| **Organization**   | Pfizer Medical Industries                                      |
+| **Geography**      | India — District-Wise (753 districts, all states + UTs)        |
+| **PRD Version**    | 1.0                                                            |
+| **Project Type**   | Demo-Level Strategic Intelligence Platform                     |
 
 ---
 
 ## Purpose
 
-This platform is a **map-first sales intelligence system** that provides district-level revenue visibility across the United States for Pfizer Medical Industries. It is **not** a CRM, payment processor, or AI forecasting engine. It is a visualization and performance platform designed for demo-level implementation with simplified territory boundaries.
+A **map-first sales intelligence system** providing district-level revenue visibility across India for Pfizer Medical Industries.  
+It is **not** a CRM, payment processor, or AI forecasting engine — it is a visualization and performance platform targeting demo-level implementation with real India district boundaries.
 
 ---
 
 ## Technology Stack
 
-| Layer            | Technology                              |
-|------------------|-----------------------------------------|
-| **Frontend**     | React (Vite + TypeScript), Mapbox / Leaflet, Chart.js, Tailwind CSS |
-| **Backend**      | Node.js (Express + TypeScript), Prisma ORM           |
-| **Database**     | Supabase (PostgreSQL)                   |
-| **Auth**         | JWT, Enum-based Role Validation         |
-| **Email**        | Resend SDK                              |
-| **Deployment**   | GitHub Pages (Frontend), Render (Backend), Supabase (DB) |
+| Layer          | Technology                                                                        |
+|----------------|-----------------------------------------------------------------------------------|
+| **Frontend**   | React 18 (Vite + TypeScript), Leaflet (GeoJSON choropleth), Tailwind CSS          |
+| **Backend**    | Node.js (Express + TypeScript), Supabase JS client (no Prisma in production flow) |
+| **Database**   | Supabase (PostgreSQL) — direct client, schema managed via Supabase migrations      |
+| **Auth**       | JWT (8 h expiry), Enum-based Role Validation                                       |
+| **Email**      | Resend SDK                                                                         |
+| **Deployment** | GitHub Pages (Frontend), Render (Backend), Supabase (DB)                          |
+
+> **Note:** `backend/prisma/` and `schema.prisma` are present in the repo but the active DB workflow uses **Supabase MCP migrations** (`apply_migration`) and the `@supabase/supabase-js` client directly. Prisma is not used at runtime.
 
 ---
 
@@ -35,22 +38,41 @@ This platform is a **map-first sales intelligence system** that provides distric
 
 ```
 /
-├── frontend/                  # React Vite app → GitHub Pages
+├── frontend/                        # React Vite app → GitHub Pages
+│   ├── .env                         # VITE_ENABLE_GEOLOCATION=true
 │   └── src/
-│       ├── api/client.ts      # Axios + JWT interceptors
+│       ├── api/client.ts            # Axios + JWT interceptors
 │       ├── context/AuthContext.tsx
-│       ├── components/        # Layout, Sidebar, TopBar, ProtectedRoute
-│       └── pages/             # login, set-password, admin, management, sales, map
-├── backend/                   # Express API → Render
-│   ├── prisma/
-│   │   ├── schema.prisma      # All 7 data models
-│   │   └── seed.ts            # Extensible upsert-based seeder
+│       ├── components/              # Layout, Sidebar, TopBar, ProtectedRoute
+│       ├── services/
+│       │   └── geolocation.service.ts  # getCurrentLocation() + reverseGeocode()
+│       └── pages/
+│           ├── LoginPage.tsx
+│           ├── SetPasswordPage.tsx
+│           ├── admin/AdminDashboard.tsx
+│           ├── management/ManagementDashboard.tsx
+│           ├── sales/SalesDashboard.tsx
+│           └── map/MapPage.tsx      # Choropleth map — India GeoJSON + revenue overlay
+├── backend/
+│   ├── prisma/                      # Legacy schema + seed (kept for reference)
+│   │   ├── schema.prisma
+│   │   └── seed.ts
 │   └── src/
-│       ├── config/env.ts
-│       ├── middleware/auth.ts  # verifyToken + requireRole
-│       ├── utils/userCode.ts  # SL_001, AD_001, MP_001 auto-gen
-│       ├── services/email.ts  # Resend onboarding email
-│       └── routes/            # auth, admin, sales, map, dashboard
+│       ├── config/
+│       │   ├── env.ts
+│       │   └── supabase.ts          # Supabase client singleton
+│       ├── middleware/auth.ts       # verifyToken + requireRole
+│       ├── utils/userCode.ts        # SL_001, AD_001, MP_001 auto-gen
+│       ├── services/email.ts        # Resend onboarding email
+│       ├── routes/
+│       │   ├── auth.ts
+│       │   ├── admin.ts
+│       │   ├── sales.ts
+│       │   ├── map.ts
+│       │   └── dashboard.ts
+│       └── scripts/
+│           ├── seedIndiaDistricts.ts       # Seed all 753 Indian districts
+│           └── importDistrictPolygons.ts   # Populate Territory.polygon from GeoJSON CDN
 ├── docs/DEPLOYMENT.md
 ├── render.yaml
 └── Agent.md
@@ -60,27 +82,28 @@ This platform is a **map-first sales intelligence system** that provides distric
 
 ## User Roles & Access Control
 
-Authentication is JWT-based with enum-driven role control. Three roles:
+JWT-based with enum-driven role control. Three roles:
 
 ### ADMIN
 - Create / Edit Sales Reps → auto-generate `SL_XXX`, send onboarding email
-- Create / Edit Products and Territories
+- Create / Edit Products
+- Assign / Unassign territories to Sales Reps (Territory tab in Admin Dashboard)
 - View all sales records (paginated)
 - Activate / Deactivate users
 - View system-wide dashboards
-- **Cannot** modify financial rules (future scope)
+- Full India map access
 
 ### SALES
-- Add Sales Records (territory enforced from JWT, not body)
-- View personally assigned territories and district map
+- Add Sales Records (territory must be assigned to them — enforced at API level)
+- View personally assigned territories on district map
 - View personal performance dashboard
-- **Cannot** view other reps' data or create products
+- **Cannot** view other reps' data or add products
+- Map renders only their assigned district polygons in colour
 
 ### MANAGEMENT
-- View full USA map with all districts
-- Toggle heatmap and markers
-- Drill into territories and view regional dashboards
-- Identify underperforming regions and revenue distribution
+- View full India map with all districts coloured
+- Toggle heatmap / outline modes
+- Drill into territories, view regional dashboards
 - **Cannot** create sales or products
 
 ---
@@ -88,48 +111,71 @@ Authentication is JWT-based with enum-driven role control. Three roles:
 ## Functional Modules
 
 ### Map Module *(Core Entry Point — `/map`)*
-- Full-screen Leaflet USA map post-login
-- Revenue color coding: 🟢 HIGH · 🟡 MEDIUM · 🔴 LOW
-- Heatmap toggle; click marker → Territory detail panel
-- Filters: date range, product, sales rep, search
-- SALES role restricted to assigned territories only
 
-### Territory Performance Panel
-- Revenue, Deals, Avg Deal Size per territory
-- Opens as side panel on marker click
+**GeoJSON Choropleth (not circle/marker heatmap)**
+
+- Fetches ~594-district India GeoJSON from CDN on first load (browser-cached after)
+- Fetches revenue data from `GET /api/map/districts` — merged client-side by district name
+- **Heatmap ON**: filled district polygons — 🟢 HIGH · 🟡 MEDIUM · 🔴 LOW
+- **Heatmap OFF**: neutral gray polygon outlines + centroid markers (coloured by revenue level)
+- Hover tooltip: District name, state, revenue, deals
+- Click polygon → Territory Performance side panel
+- SALES role: only assigned territories displayed in colour; others faint
+
+**Revenue Level Logic (percentile-based, $0 territories excluded from threshold calc):**
+- HIGH  → top 30% of territories **with** revenue > $0
+- MEDIUM → middle 40%
+- LOW   → bottom 30%; also used for $0-revenue territories (rendered dark/faint)
+
+**Geolocation (enabled via `VITE_ENABLE_GEOLOCATION=true`)**
+1. On page load: `navigator.geolocation.getCurrentPosition()`
+2. Point-in-polygon ray-cast against loaded GeoJSON → find user's district
+3. Fallback: Nominatim reverse geocode if ray-cast fails (boundary gaps)
+4. Map zooms to matched district (`fitBounds`), auto-opens side panel
+5. SALES role: if matched district is not assigned → shows toast, no panel
+6. Graceful degradation: permission denied / timeout → full India view, no panel
+
+### Territory Assignment (Admin Dashboard — Territories tab)
+
+- Sales rep dropdown → loads their currently assigned territories
+- Checkbox multi-select across all 753 Indian districts
+- `POST /api/admin/sales-users/:id/territories` — bulk assign
+- `DELETE /api/admin/sales-users/:id/territories/:tid` — remove single mapping
+- Assignment propagates immediately to map and sales form dropdown
 
 ### Sales Data Module (`/sales/dashboard`)
-- Sales creation form with product/territory dropdown
+
+- Sales creation form with product + territory dropdown
+- Territory dropdown shows **only assigned** territories for SALES role (from `GET /api/sales/territories`)
 - `salesRepId` injected from JWT — never from request body
-- Territory assignment validated at API level
+- Territory assignment validated at API level (403 if unassigned)
 
 ### Management Dashboard (`/management/dashboard`)
 - Revenue by Region (Doughnut chart)
 - Monthly Revenue Trend (Line chart)
 - Top 5 / Bottom 5 territories table
-- Expansion / Pricing opportunity indicators
 
-### Admin Module (`/admin/dashboard`)
-- User management table (create, activate/deactivate)
-- Product catalogue (create)
-- Onboarding email sent on Sales Rep creation
+### Admin Dashboard (`/admin/dashboard`)
+- **Users tab**: create, activate/deactivate sales reps
+- **Products tab**: create products
+- **Territories tab**: assign/unassign territories to sales reps
 
 ---
 
-## Data Model (PostgreSQL via Prisma)
+## Data Model (PostgreSQL via Supabase)
 
-> Prisma schema lives at `backend/prisma/schema.prisma`
-
-| Model | Key Fields | Indexes |
-|-------|-----------|--------|
-| Role | id, name | unique(name) |
-| User | id(UUID), userCode, email, roleId, isActive, isFirstLogin, onboardingToken | unique(email), unique(userCode), unique(onboardingToken) |
-| Territory | id(UUID), name, state, region, lat, lng | — |
+| Model | Key Fields | Notes |
+|-------|-----------|-------|
+| Role | id, name | Enum: ADMIN, SALES, MANAGEMENT |
+| User | id(UUID), userCode, email, roleId, isActive, isFirstLogin, onboardingToken | unique(email, userCode, onboardingToken) |
+| Territory | id(UUID), name, state, region, latitude, longitude, **radius**(INT), **polygon**(JSONB) | 753 Indian districts seeded |
 | Product | id(UUID), name, category, price | — |
 | Customer | id(UUID), name, industry, location, contact | — |
-| **Sale** | id, revenue, deals, qty, saleDate, territoryId, salesRepId, productId, customerId | territoryId, salesRepId, saleDate, productId |
+| Sale | id, revenue, deals, qty, saleDate, territoryId, salesRepId, productId, customerId | indexed on territoryId, salesRepId, saleDate |
 | SalesRepTerritory | salesRepId, territoryId, assignedAt | unique(salesRepId, territoryId) |
-| Invoice | saleId(unique FK) | — |
+
+> `Territory.radius` — approximate district coverage radius in metres (used as fallback)  
+> `Territory.polygon` — GeoJSON geometry; populated by running `importDistrictPolygons.ts`
 
 ---
 
@@ -139,55 +185,66 @@ Authentication is JWT-based with enum-driven role control. Three roles:
 |--------|------|------|-------------|
 | POST | `/api/auth/login` | Public | Login by email OR userCode |
 | POST | `/api/auth/set-password` | Public | Set password via onboarding token |
-| GET | `/api/auth/me` | Any | Current user info |
-| GET/POST | `/api/admin/users` | ADMIN | List / Create sales reps |
-| PUT | `/api/admin/users/:id/activate` | ADMIN | Activate user |
-| PUT | `/api/admin/users/:id/deactivate` | ADMIN | Deactivate user |
-| GET/POST | `/api/admin/products` | ADMIN | List / Create products |
-| GET/POST | `/api/admin/territories` | ADMIN | List / Create territories |
+| GET  | `/api/auth/me` | Any Auth | Current user info |
+| GET  | `/api/admin/users` | ADMIN | List all users |
+| POST | `/api/admin/users` | ADMIN | Create sales rep + send onboarding email |
+| PUT  | `/api/admin/users/:id/activate` | ADMIN | Activate user |
+| PUT  | `/api/admin/users/:id/deactivate` | ADMIN | Deactivate user |
+| GET  | `/api/admin/products` | ADMIN | List products |
+| POST | `/api/admin/products` | ADMIN | Create product |
+| GET  | `/api/admin/territories` | ADMIN | List all territories |
+| POST | `/api/admin/territories` | ADMIN | Create territory |
 | POST | `/api/admin/territories/assign` | ADMIN | Assign territory to rep |
 | DELETE | `/api/admin/territories/assign` | ADMIN | Unassign territory |
-| GET | `/api/admin/sales` | ADMIN | All sales (paginated) |
-| GET/POST | `/api/sales` | SALES+ADMIN | Own sales / Create sale |
-| GET | `/api/map/territories` | All Auth | Aggregated revenue map data |
-| GET | `/api/dashboard/sales` | SALES | Personal KPIs |
-| GET | `/api/dashboard/management` | MGMT+ADMIN | Regional KPIs |
+| GET  | `/api/admin/sales` | ADMIN | All sales (paginated) |
+| GET  | `/api/admin/sales-users` | ADMIN | List SALES role users |
+| GET  | `/api/admin/sales-users/:id/territories` | ADMIN | Get assigned territories for a user |
+| POST | `/api/admin/sales-users/:id/territories` | ADMIN | Bulk assign territories to a user |
+| DELETE | `/api/admin/sales-users/:id/territories/:tid` | ADMIN | Remove territory assignment |
+| GET  | `/api/sales` | SALES | Own sales records |
+| POST | `/api/sales` | SALES | Create sale (territory must be assigned) |
+| GET  | `/api/sales/territories` | SALES | Territories assigned to logged-in rep |
+| GET  | `/api/map/territories` | All Auth | City/circle-based revenue map data (legacy) |
+| GET  | `/api/map/districts` | All Auth | **District-level revenue data for choropleth** |
+| GET  | `/api/dashboard/sales` | SALES | Personal KPIs |
+| GET  | `/api/dashboard/management` | MGMT+ADMIN | Regional KPIs |
 
 ---
 
 ## Security Requirements
 
-- JWT (`8h` expiry) on all protected routes
-- `verifyToken` + `requireRole(...roles)` middleware chain
+- JWT (`8h` expiry) on all protected routes via `verifyToken` middleware
+- `requireRole(...roles)` middleware enforced on all role-restricted endpoints
 - Passwords hashed with `bcrypt` (rounds: 12)
-- Active user validation on every authenticated request
-- `salesRepId` ALWAYS from JWT — never from request body
+- Active user validation on every authenticated request (`isActive` check)
+- `salesRepId` **always** from JWT — never from request body
+- Territory assignment validated at sale-creation time (403 if not assigned)
 - Onboarding token: 32-byte hex, 24h expiry, single-use
 
 ---
 
-## Seeding System
+## Territory & Seed System
 
-`backend/prisma/seed.ts` uses **UPSERT** — safe to re-run after any schema change.
+### India Districts Seed
+753 Indian districts across all 28 states + 8 union territories, seeded via Supabase `execute_sql`.
 
-**To add new seeded users:** add an entry to `SEED_USERS[]` array and run:
+**To re-seed districts (from backend dir):**
 ```bash
-npm run prisma:seed
+npx ts-node --transpile-only src/scripts/seedIndiaDistricts.ts
 ```
 
-**After schema changes:**
+### Import District Polygons (one-time)
+Fetches India district GeoJSON from GitHub CDN, matches by district name, stores polygon in DB:
 ```bash
-npm run prisma:migrate:dev  # creates migration
-npm run prisma:seed          # re-seeds (upsert-safe)
-# Or full reset:
-npm run prisma:reset         # migrate reset + seed
+npx ts-node --transpile-only src/scripts/importDistrictPolygons.ts
 ```
 
-**Default seeded accounts:**
-| Code | Email | Password | Role |
-|------|-------|----------|------|
-| AD_001 | admin@pfizer.com | Admin@1234 | ADMIN |
-| MP_001 | management@pfizer.com | Mgmt@1234 | MANAGEMENT |
+### Default Seeded Accounts
+
+| Code   | Email                      | Password   | Role       |
+|--------|----------------------------|------------|------------|
+| AD_001 | admin@pfizer.com           | Admin@1234 | ADMIN      |
+| MP_001 | management@pfizer.com      | Mgmt@1234  | MANAGEMENT |
 
 ---
 
@@ -195,11 +252,11 @@ npm run prisma:reset         # migrate reset + seed
 
 `backend/src/utils/userCode.ts` auto-increments per role:
 
-| Role | Format | Example |
-|------|--------|---------|
-| ADMIN | `AD_NNN` | AD_001 |
-| SALES | `SL_NNN` | SL_001, SL_002 |
-| MANAGEMENT | `MP_NNN` | MP_001 |
+| Role       | Format   | Example           |
+|------------|----------|-------------------|
+| ADMIN      | `AD_NNN` | AD_001            |
+| SALES      | `SL_NNN` | SL_001, SL_002    |
+| MANAGEMENT | `MP_NNN` | MP_001            |
 
 ---
 
@@ -207,15 +264,17 @@ npm run prisma:reset         # migrate reset + seed
 
 When building, extending, or debugging this platform:
 
-1. **Map-First Philosophy** — The Leaflet map is the primary entry point. All features must preserve the map-first UX.
-2. **Role Enforcement** — Every API endpoint validates JWT role against allowed roles via `requireRole()` middleware.
-3. **Query-Based Aggregations** — All KPIs are computed at query time (`GROUP BY` + `SUM`). No cached/precomputed values in MVP.
-4. **Prisma + Supabase** — All DB interactions via Prisma ORM. Raw SQL only for complex aggregations.
-5. **Indexed Queries** — Always filter/JOIN on indexed columns (`territoryId`, `salesRepId`, `saleDate`, `productId`).
-6. **No Scope Creep** — Do not implement CRM, payment gateway, AI forecasting, or streaming unless explicitly instructed.
-7. **One Sale → One Territory** — Enforced at schema + API level. Never allow multi-territory sales.
-8. **Sales Rep Isolation** — SALES users see only their own records. `salesRepId` is always from JWT.
-9. **Password Security** — Always bcrypt (rounds 12). Never log or return `passwordHash`.
-10. **Onboarding Flow** — `isFirstLogin=true` users must set password before accessing any protected route. Redirect to `/set-password?token=XYZ`.
-11. **Extensible Seeding** — Any new role or seeded user must be added to `SEED_USERS[]` in `seed.ts`. Re-run seed after schema changes.
-12. **Dark Theme** — UI uses deep navy `#08090f` base with yellow-gold `#eab308` accent. Never introduce light-mode overrides without explicit instruction.
+1. **Map-First Philosophy** — Leaflet GeoJSON choropleth is the primary entry point. All features must preserve the polygon-based map-first UX. Do **not** reintroduce circle/marker heatmap rendering.
+2. **India Geography** — All territory references are Indian districts. Do not revert to USA terminology or geography.
+3. **Role Enforcement** — Every API endpoint validates JWT role via `requireRole()`. SALES users see only their assigned territories everywhere (map, form dropdowns, side panel).
+4. **Revenue Percentiles from Non-Zero Only** — `HIGH/MEDIUM/LOW` thresholds always computed from territories with `revenue > 0`. Including $0 territories in the sort would collapse all thresholds to $0.
+5. **Supabase Client (not Prisma)** — All DB interactions use `@supabase/supabase-js`. Prisma schema files are reference-only. DDL changes go via `apply_migration`.
+6. **Indexed Queries** — Always filter on indexed columns (`territoryId`, `salesRepId`, `saleDate`, `productId`).
+7. **No Scope Creep** — Do not implement CRM, payment gateway, AI forecasting, or streaming unless explicitly instructed.
+8. **One Sale → One Territory** — Enforced at schema + API level. Multi-territory sales are not supported.
+9. **Sales Rep Isolation** — SALES users see only their own records. `salesRepId` is always from JWT.
+10. **Password Security** — Always bcrypt (rounds 12). Never log or return `passwordHash`.
+11. **Onboarding Flow** — `isFirstLogin=true` users must set password before any protected route. Redirect to `/set-password?token=XYZ`.
+12. **Dark Theme** — UI base `#08090f` deep navy with yellow-gold `#eab308` accent. Never introduce light-mode overrides.
+13. **Geolocation Safety** — `VITE_ENABLE_GEOLOCATION=false` in `.env` disables auto-detect without code changes. Always handle denied/timeout gracefully (fallback to full India view).
+14. **GeoJSON Caching** — The India district GeoJSON (~15 MB) is fetched once per session and stored in a component ref. Never re-fetch on state change or heatmap toggle.

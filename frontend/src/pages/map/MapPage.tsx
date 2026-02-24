@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
+import { getCurrentLocation, reverseGeocode } from '../../services/geolocation.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TerritoryData {
@@ -9,24 +10,54 @@ interface TerritoryData {
   revenue: number; deals: number; avgDeal: number;
   revenueLevel: 'HIGH' | 'MEDIUM' | 'LOW';
 }
-interface PanelData {
-  name: string; state: string; revenue: number;
-  deals: number; avgDeal: number; revenueLevel: 'HIGH' | 'MEDIUM' | 'LOW';
-}
+interface PanelData extends TerritoryData { displayName: string; geoState: string; }
+
+type GeoStatus =
+  | 'idle'
+  | 'detecting'
+  | 'geocoding'
+  | 'matched'
+  | 'unassigned'      // SALES role — district not in their territories
+  | 'no_match'        // coords found but no GeoJSON district matched
+  | 'denied'
+  | 'error';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FILL = { HIGH: '#22c55e', MEDIUM: '#f59e0b', LOW: '#ef4444' } as const;
 const LABEL = { HIGH: 'High Revenue', MEDIUM: 'Medium Revenue', LOW: 'Low Revenue' } as const;
-// India district GeoJSON — properties: DISTRICT (name), ST_NM (state)
 const GEO_URL = 'https://raw.githubusercontent.com/geohacker/india/master/district/india_district.geojson';
+const GEO_ENABLED = (import.meta as any).env?.VITE_ENABLE_GEOLOCATION !== 'false';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-/** Try multiple property keys that different GeoJSON sources use for district name */
 const districtName = (props: any): string =>
   (props?.DISTRICT || props?.dtname || props?.NAME_2 || props?.district || '').toLowerCase().trim();
 
 const stateFromProps = (props: any): string =>
   props?.ST_NM || props?.NAME_1 || props?.state || '';
+
+// ─── Point-in-Polygon (ray casting — no external dep needed) ─────────────────
+function pointInPolygon(lat: number, lng: number, coords: number[][][]): boolean {
+  // coords[0] = outer ring, coords[1..] = holes (ignored for fast check)
+  const ring = coords[0];
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];  // [lng, lat]
+    const [xj, yj] = ring[j];
+    const intersect =
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInGeoJSONFeature(lat: number, lng: number, geometry: any): boolean {
+  if (!geometry) return false;
+  if (geometry.type === 'Polygon') return pointInPolygon(lat, lng, geometry.coordinates);
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.some((poly: number[][][]) => pointInPolygon(lat, lng, poly));
+  }
+  return false;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function MapPage() {
@@ -34,11 +65,12 @@ export default function MapPage() {
   const mapRef = useRef<any>(null);
   const geoLayerRef = useRef<any>(null);
   const mkLayerRef = useRef<any>(null);
-  const geoDataRef = useRef<any>(null);                    // cached raw GeoJSON
-  const tmapRef = useRef<Map<string, TerritoryData>>(new Map()); // lc-name → data
-  const allowedRef = useRef<Set<string>>(new Set());       // lc-names allowed for SALES
+  const geoDataRef = useRef<any>(null);
+  const tmapRef = useRef<Map<string, TerritoryData>>(new Map());
+  const allowedRef = useRef<Set<string>>(new Set());
   const allowedAllRef = useRef(true);
-  const heatmapRef = useRef(true);                         // ref copy to avoid stale closures
+  const heatmapRef = useRef(true);
+  const highlightRef = useRef<any>(null); // currently highlighted layer
 
   const [heatmap, setHeatmap] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -47,33 +79,40 @@ export default function MapPage() {
   const [selected, setSelected] = useState<PanelData | null>(null);
   const [stats, setStats] = useState({ total: 0, withData: 0 });
 
-  // ─── Style helper (uses refs, never stale) ──────────────────────────────────
-  const styleFeature = (feature: any, isHeatmap: boolean): L.PathOptions => {
+  // Geolocation state
+  const [geoStatus, setGeoStatus] = useState<GeoStatus>('idle');
+  const [geoToast, setGeoToast] = useState<string | null>(null);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [myDistrict, setMyDistrict] = useState<string | null>(null); // matched district name
+
+  const showToast = useCallback((msg: string, dur = 4000) => {
+    setGeoToast(msg);
+    setTimeout(() => setGeoToast(null), dur);
+  }, []);
+
+  // ── Style helper ────────────────────────────────────────────────────────────
+  const styleFeature = (feature: any, isHeatmap: boolean): any => {
     const name = districtName(feature.properties);
     const data = tmapRef.current.get(name);
     const allowed = allowedAllRef.current || allowedRef.current.has(name);
     const lvl = data?.revenueLevel ?? 'LOW';
-    const hasRevenue = data && data.revenue > 0;
+    const hasRev = data && data.revenue > 0;
 
     if (isHeatmap) {
       return {
-        fillColor: allowed ? (hasRevenue ? FILL[lvl] : '#1e293b') : '#0f172a',
-        fillOpacity: allowed ? (hasRevenue ? 0.72 : 0.18) : 0.08,
-        color: '#0f172a',
-        weight: 0.6,
-        opacity: 0.9,
+        fillColor: allowed ? (hasRev ? FILL[lvl] : '#1e293b') : '#0f172a',
+        fillOpacity: allowed ? (hasRev ? 0.70 : 0.18) : 0.08,
+        color: '#0f172a', weight: 0.6, opacity: 0.9,
       };
     }
     return {
       fillColor: allowed ? '#334155' : '#111827',
       fillOpacity: allowed ? 0.25 : 0.08,
-      color: '#475569',
-      weight: 1,
-      opacity: 0.8,
+      color: '#475569', weight: 1, opacity: 0.8,
     };
   };
 
-  // ─── Step 1: Fetch revenue data ─────────────────────────────────────────────
+  // ── Step 1: Revenue data ────────────────────────────────────────────────────
   useEffect(() => {
     client.get('/api/map/districts').then(r => {
       const map = new Map<string, TerritoryData>();
@@ -85,7 +124,7 @@ export default function MapPage() {
     }).catch(() => setApiReady(true));
   }, []);
 
-  // ─── Step 2: Init Leaflet map (India-centered) ───────────────────────────────
+  // ── Step 2: Init Leaflet map ────────────────────────────────────────────────
   useEffect(() => {
     let dead = false;
     import('leaflet').then(L => {
@@ -106,7 +145,7 @@ export default function MapPage() {
     };
   }, []);
 
-  // ─── Step 3: Build GeoJSON layer when both ready ────────────────────────────
+  // ── Step 3: Build GeoJSON layer ─────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !apiReady) return;
     let cancelled = false;
@@ -115,7 +154,6 @@ export default function MapPage() {
       const L = await import('leaflet');
       if (cancelled || !mapRef.current) return;
 
-      // Fetch GeoJSON once (browser caches after first load)
       if (!geoDataRef.current) {
         setGeoLoading(true);
         try {
@@ -123,6 +161,7 @@ export default function MapPage() {
           geoDataRef.current = await res.json();
         } catch {
           setGeoLoading(false);
+          showToast('⚠️ Failed to load district GeoJSON.');
           return;
         }
         setGeoLoading(false);
@@ -133,29 +172,28 @@ export default function MapPage() {
       if (cancelled || !mapRef.current) return;
       const map = mapRef.current;
 
-      // Remove stale layers
       geoLayerRef.current?.remove();
       mkLayerRef.current?.remove();
+      highlightRef.current = null;
 
-      // Build centroid markers (for heatmap-OFF mode)
+      // Centroid marker layer (heatmap-OFF)
       const mkGroup = L.layerGroup();
       tmapRef.current.forEach(t => {
         if (!t.latitude || !t.longitude) return;
         const mk = L.circleMarker([t.latitude, t.longitude], {
-          radius: 5, fillColor: FILL[t.revenueLevel], color: '#fff',
-          weight: 1.5, fillOpacity: 0.9, opacity: 1,
+          radius: 5, fillColor: FILL[t.revenueLevel],
+          color: '#fff', weight: 1.5, fillOpacity: 0.9, opacity: 1,
         });
         mk.bindTooltip(`<b>${t.name}</b><br/>$${t.revenue.toLocaleString()}`,
           { className: 'map-tooltip', direction: 'auto' });
         mk.on('click', () => setSelected({
-          name: t.name, state: t.state, revenue: t.revenue,
-          deals: t.deals, avgDeal: t.avgDeal, revenueLevel: t.revenueLevel,
+          ...t, displayName: t.name, geoState: t.state,
         }));
         mkGroup.addLayer(mk);
       });
       mkLayerRef.current = mkGroup;
 
-      // Build GeoJSON polygon layer
+      // GeoJSON polygon layer
       let withData = 0;
       const layer = L.geoJSON(geoDataRef.current, {
         style: (f) => styleFeature(f, heatmapRef.current),
@@ -170,24 +208,22 @@ export default function MapPage() {
             `<div style="font-weight:700;font-size:13px">${dispName}</div>` +
             `<div style="font-size:11px;opacity:.7">${stateName}</div>` +
             (data
-              ? `<div style="margin-top:4px">Revenue: <b>$${data.revenue.toLocaleString()}</b></div>` +
-              `<div>Deals: ${data.deals}</div>`
+              ? `<div style="margin-top:4px">Revenue: <b>$${data.revenue.toLocaleString()}</b></div><div>Deals: ${data.deals}</div>`
               : `<div style="opacity:.5;margin-top:4px">No sales data</div>`),
             { className: 'map-tooltip', sticky: true, direction: 'auto' }
           );
 
           flayer.on({
             mouseover: (e: any) => {
-              e.target.setStyle({ weight: 2, fillOpacity: Math.min((e.target.options.fillOpacity || 0.3) + 0.25, 1) });
+              if (highlightRef.current !== e.target)
+                e.target.setStyle({ weight: 2.5, fillOpacity: Math.min((e.target.options.fillOpacity || .3) + .2, 1) });
               e.target.bringToFront();
             },
-            mouseout: (e: any) => { layer.resetStyle(e.target); },
+            mouseout: (e: any) => {
+              if (highlightRef.current !== e.target) layer.resetStyle(e.target);
+            },
             click: () => {
-              if (data) setSelected({
-                name: dispName, state: stateName || data.state,
-                revenue: data.revenue, deals: data.deals, avgDeal: data.avgDeal,
-                revenueLevel: data.revenueLevel
-              });
+              if (data) setSelected({ ...data, displayName: dispName, geoState: stateName || data.state });
             },
           });
         },
@@ -201,17 +237,123 @@ export default function MapPage() {
     return () => { cancelled = true; };
   }, [mapReady, apiReady]);
 
-  // ─── Step 4: Update styles on heatmap toggle ─────────────────────────────────
+  // ── Step 4: Geolocation flow (runs after GeoJSON layer is built) ────────────
+  useEffect(() => {
+    if (!mapReady || !apiReady || geoLoading) return;
+    if (!GEO_ENABLED) return;
+    if (!geoDataRef.current || !geoLayerRef.current) return;
+
+    let cancelled = false;
+    setGeoStatus('detecting');
+
+    (async () => {
+      let lat: number, lng: number;
+      try {
+        const coords = await getCurrentLocation();
+        lat = coords.latitude; lng = coords.longitude;
+        setUserCoords({ lat, lng });
+      } catch (err: any) {
+        if (cancelled) return;
+        const msg = err.message || 'Location unavailable';
+        setGeoStatus(msg.includes('denied') ? 'denied' : 'error');
+        showToast(`📍 ${msg}. Showing full India view.`);
+        return;
+      }
+
+      if (cancelled) return;
+      setGeoStatus('geocoding');
+
+      // Place user marker on map
+      const L = await import('leaflet');
+      if (cancelled || !mapRef.current) return;
+      const userIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:14px;height:14px;background:#60a5fa;border:2px solid #fff;border-radius:50%;box-shadow:0 0 8px #60a5fa88"></div>`,
+        iconSize: [14, 14], iconAnchor: [7, 7],
+      });
+      L.marker([lat, lng], { icon: userIcon })
+        .bindTooltip('📍 Your location', { className: 'map-tooltip', permanent: false })
+        .addTo(mapRef.current);
+
+      // Point-in-polygon match against loaded GeoJSON
+      let matchedFeature: any = null;
+      let matchedLayer: any = null;
+
+      if (geoLayerRef.current) {
+        geoLayerRef.current.eachLayer((layer: any) => {
+          if (matchedFeature) return;
+          if (pointInGeoJSONFeature(lat, lng, layer.feature?.geometry)) {
+            matchedFeature = layer.feature;
+            matchedLayer = layer;
+          }
+        });
+      }
+
+      // Fallback: reverse geocode if pip failed (e.g. boundary gaps)
+      if (!matchedFeature) {
+        try {
+          const geo = await reverseGeocode(lat, lng);
+          if (cancelled) return;
+          const normDistrict = geo.district.toLowerCase().trim();
+          // Try to find a territory by geocoded district name
+          geoLayerRef.current?.eachLayer((layer: any) => {
+            if (matchedFeature) return;
+            const fname = districtName(layer.feature?.properties);
+            if (fname === normDistrict || fname.includes(normDistrict) || normDistrict.includes(fname)) {
+              matchedFeature = layer.feature;
+              matchedLayer = layer;
+            }
+          });
+        } catch { /* Nominatim failed — no match */ }
+      }
+
+      if (cancelled) return;
+
+      if (!matchedFeature || !matchedLayer) {
+        setGeoStatus('no_match');
+        // Just zoom to user's location
+        mapRef.current?.setView([lat, lng], 9);
+        showToast('📍 Zoomed to your location. No matching district found in data.');
+        return;
+      }
+
+      const rawName = districtName(matchedFeature.properties);
+      const dispName = matchedFeature.properties?.DISTRICT || rawName;
+      const stateName = stateFromProps(matchedFeature.properties);
+      const data = tmapRef.current.get(rawName);
+
+      // Role check for SALES
+      if (!allowedAllRef.current && !allowedRef.current.has(rawName)) {
+        setGeoStatus('unassigned');
+        mapRef.current?.setView([lat, lng], 9);
+        showToast(`🚫 You are not assigned to ${dispName}. Zoomed to your location.`, 6000);
+        return;
+      }
+
+      // Zoom to district (no highlight — keep normal choropleth colour)
+      mapRef.current?.fitBounds(matchedLayer.getBounds(), { padding: [40, 40], maxZoom: 11 });
+
+      setMyDistrict(dispName);
+      setGeoStatus('matched');
+
+      // Auto-open side panel
+      if (data) {
+        setSelected({ ...data, displayName: dispName, geoState: stateName || data.state });
+      }
+      showToast(`📍 Your district: ${dispName}`, 3000);
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady, apiReady, geoLoading]);
+
+  // ── Heatmap toggle ──────────────────────────────────────────────────────────
   useEffect(() => {
     heatmapRef.current = heatmap;
-    if (!geoLayerRef.current || !mapReady) return;
-
-    // Update polygon fills
+    if (!geoLayerRef.current) return;
     geoLayerRef.current.eachLayer((layer: any) => {
       layer.setStyle(styleFeature(layer.feature, heatmap));
     });
-
-    // Toggle centroid markers
     if (mkLayerRef.current && mapRef.current) {
       if (heatmap) mkLayerRef.current.remove();
       else mkLayerRef.current.addTo(mapRef.current);
@@ -219,14 +361,43 @@ export default function MapPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heatmap]);
 
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   const lvlColor = selected ? FILL[selected.revenueLevel] : '#6b7280';
+
+  const GeoStatusBadge = () => {
+    if (geoStatus === 'idle' || geoStatus === 'matched') return null;
+    const map: Record<GeoStatus, { icon: string; text: string; color: string }> = {
+      idle: { icon: '', text: '', color: '' },
+      detecting: { icon: '📡', text: 'Detecting your location…', color: '#60a5fa' },
+      geocoding: { icon: '🔍', text: 'Identifying district…', color: '#a78bfa' },
+      matched: { icon: '', text: '', color: '' },
+      unassigned: { icon: '🚫', text: 'District not assigned', color: '#ef4444' },
+      no_match: { icon: '❓', text: 'District not in data', color: '#f59e0b' },
+      denied: { icon: '🔒', text: 'Location denied', color: '#6b7280' },
+      error: { icon: '⚠️', text: 'Location unavailable', color: '#f59e0b' },
+    };
+    const info = map[geoStatus];
+    if (!info.text) return null;
+    return (
+      <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full animate-pulse"
+        style={{ backgroundColor: info.color + '22', color: info.color, border: `1px solid ${info.color}44` }}>
+        {info.icon} {info.text}
+      </span>
+    );
+  };
 
   return (
     <Layout title="Territory Map" subtitle="India District Revenue Choropleth — click a district for details">
+      {/* Toast */}
+      {geoToast && (
+        <div className="fixed top-4 right-4 z-[9999] max-w-xs px-4 py-3 rounded-xl text-sm text-white shadow-2xl backdrop-blur-md border border-white/10 animate-fade-in"
+          style={{ background: 'rgba(15,23,42,0.95)' }}>
+          {geoToast}
+        </div>
+      )}
+
       {/* Toolbar */}
-      <div className="flex items-center gap-4 mb-4 flex-wrap">
-        {/* Heatmap toggle */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <button id="toggle-heatmap" onClick={() => setHeatmap(h => !h)}
           className={heatmap ? 'btn-primary py-1.5 text-xs' : 'btn-secondary py-1.5 text-xs'}>
           {heatmap ? '🌡️ Heatmap ON' : '🗺️ Heatmap OFF'}
@@ -234,27 +405,34 @@ export default function MapPage() {
 
         {/* Legend */}
         {heatmap ? (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {(Object.entries(LABEL) as [keyof typeof LABEL, string][]).map(([k, v]) => (
               <span key={k} className="flex items-center gap-1.5 text-xs text-text-muted">
-                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: FILL[k] }} />
-                {v}
+                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: FILL[k] }} /> {v}
               </span>
             ))}
-            <span className="flex items-center gap-1.5 text-xs text-text-muted">
-              <span className="w-3 h-3 rounded-sm bg-slate-700" />No data
-            </span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 text-xs text-text-muted">
+          <span className="flex items-center gap-1.5 text-xs text-text-muted">
             <span className="w-3 h-3 rounded-full border border-slate-400 bg-slate-600" />
-            District outlines + centroid markers
-          </div>
+            Outlines + centroid markers
+          </span>
         )}
 
-        {/* Status */}
+        {/* Geo status inline badge */}
+        <GeoStatusBadge />
+
+        {/* My district badge */}
+        {myDistrict && geoStatus === 'matched' && (
+          <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
+            style={{ backgroundColor: '#60a5fa22', color: '#60a5fa', border: '1px solid #60a5fa44' }}>
+            📍 Viewing your district: <b className="ml-1">{myDistrict}</b>
+          </span>
+        )}
+
         <span className="ml-auto text-xs text-text-muted">
-          {geoLoading ? '⏳ Loading GeoJSON…'
+          {geoLoading
+            ? '⏳ Loading GeoJSON…'
             : `${stats.withData} / ${stats.total} districts with revenue data`}
         </span>
       </div>
@@ -263,23 +441,38 @@ export default function MapPage() {
         {/* Map */}
         <div className="md:col-span-2 rounded-card overflow-hidden border border-bg-border relative" style={{ minHeight: 400 }}>
           <div ref={mapEl} style={{ width: '100%', height: '100%' }} />
+
           {geoLoading && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface/80 gap-3">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ background: 'rgba(8,9,15,0.8)' }}>
               <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
               <p className="text-text-muted text-sm">Loading India district boundaries…</p>
-              <p className="text-text-subtle text-xs">First load only (~15 MB, then cached)</p>
+              <p className="text-text-subtle text-xs">First load only (~15 MB, cached after)</p>
+            </div>
+          )}
+
+          {(geoStatus === 'detecting' || geoStatus === 'geocoding') && !geoLoading && (
+            <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-blue-300"
+              style={{ background: 'rgba(30,41,59,0.9)', border: '1px solid rgba(96,165,250,0.3)' }}>
+              <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+              {geoStatus === 'detecting' ? 'Detecting your location…' : 'Identifying district…'}
             </div>
           )}
         </div>
 
-        {/* Detail panel */}
+        {/* Side panel */}
         <div className="card flex flex-col overflow-y-auto">
           {selected ? (
             <>
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="text-text-primary font-bold text-base">{selected.name}</h3>
-                  <p className="text-text-muted text-xs">{selected.state}</p>
+                  <h3 className="text-text-primary font-bold text-base">{selected.displayName}</h3>
+                  <p className="text-text-muted text-xs">{selected.geoState || selected.state}</p>
+                  {myDistrict === selected.displayName && (
+                    <span className="inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: '#60a5fa22', color: '#60a5fa', border: '1px solid #60a5fa44' }}>
+                      📍 Your current district
+                    </span>
+                  )}
                 </div>
                 <button onClick={() => setSelected(null)}
                   className="text-text-muted hover:text-text-primary text-xl leading-none">&times;</button>
@@ -309,17 +502,38 @@ export default function MapPage() {
                     {LABEL[selected.revenueLevel]}
                   </span>
                 </div>
+                {userCoords && myDistrict === selected.displayName && (
+                  <div className="flex flex-col gap-1 mt-1">
+                    <span className="stat-card-label">Your Coordinates</span>
+                    <span className="text-text-primary text-xs font-mono">
+                      {userCoords.lat.toFixed(4)}°N, {userCoords.lng.toFixed(4)}°E
+                    </span>
+                  </div>
+                )}
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-2">
               <span className="text-5xl">🗺️</span>
-              <p className="text-text-muted text-sm font-medium">Click a district polygon</p>
-              <p className="text-text-subtle text-xs">
-                {heatmap
-                  ? 'Colored districts have revenue data'
-                  : 'Switch Heatmap ON to see revenue colors'}
+              <p className="text-text-muted text-sm font-medium">
+                {geoStatus === 'detecting' || geoStatus === 'geocoding'
+                  ? 'Finding your district…'
+                  : 'Click a district polygon'}
               </p>
+              <p className="text-text-subtle text-xs">
+                {geoStatus === 'denied' ? 'Allow location access and refresh to auto-detect'
+                  : geoStatus === 'unassigned' ? 'You are not assigned to your current district'
+                    : geoStatus === 'no_match' ? 'Your location is outside mapped territories'
+                      : heatmap ? 'Colored districts have revenue data'
+                        : 'Switch Heatmap ON to see revenue colors'}
+              </p>
+              {GEO_ENABLED && geoStatus === 'denied' && (
+                <button
+                  onClick={() => window.location.reload()}
+                  className="btn-secondary py-1 text-xs mt-1">
+                  🔄 Retry location
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -327,6 +541,3 @@ export default function MapPage() {
     </Layout>
   );
 }
-
-// Tell TypeScript about the PathOptions parameter type used inline
-declare type L = typeof import('leaflet');
