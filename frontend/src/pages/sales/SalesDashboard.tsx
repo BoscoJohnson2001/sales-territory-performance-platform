@@ -6,7 +6,7 @@ import client from '../../api/client';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface DashData {
   totalRevenue: number; totalDeals: number; averageDealSize: number;
@@ -15,28 +15,31 @@ interface DashData {
   territories: { id: string; name: string }[];
 }
 interface Product { id: string; name: string; }
+interface Territory { id: string; name: string; }
 interface Sale { id: string; saleDate: string; revenue: string; deals: number; territory: { name: string }; product: { name: string }; customer: { name: string }; }
 
 export default function SalesDashboard() {
   const [dash, setDash] = useState<DashData | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [territories, setTerritories] = useState<Territory[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const emptyForm = { productId:'', revenue:'', territoryId:'', saleDate:'', month:'', year:'', deals:'', quantity:'', customerName:'', customerIndustry:'', customerLocation:'', customerContact:'' };
+  const emptyForm = { productId: '', revenue: '', territoryId: '', saleDate: '', month: '', year: '', deals: '', quantity: '', customerName: '', customerIndustry: '', customerLocation: '', customerContact: '' };
   const [form, setForm] = useState(emptyForm);
 
   const fetchAll = async () => {
     setLoading(true);
-    const [dr, sr, pr] = await Promise.all([
+    const [dr, sr, pr, tr] = await Promise.all([
       client.get('/api/dashboard/sales'),
       client.get('/api/sales'),
-      client.get('/api/admin/products').catch(() => ({ data: [] })),
+      client.get('/api/sales/products').catch(() => ({ data: [] })),
+      client.get('/api/sales/territories').catch(() => ({ data: [] })),
     ]);
-    setDash(dr.data); setSales(sr.data.sales || []); setProducts(pr.data);
+    setDash(dr.data); setSales(sr.data.sales || []); setProducts(pr.data); setTerritories(tr.data);
     setLoading(false);
   };
 
@@ -57,9 +60,9 @@ export default function SalesDashboard() {
     <Layout title="My Dashboard" subtitle="Personal Sales Performance &amp; Records">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
         {[
-          { label: 'My Revenue', value: loading ? '—' : `$${Number(dash?.totalRevenue||0).toLocaleString()}` },
+          { label: 'My Revenue', value: loading ? '—' : `$${Number(dash?.totalRevenue || 0).toLocaleString()}` },
           { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0 },
-          { label: 'Avg Deal Size', value: loading ? '—' : `$${Number(dash?.averageDealSize||0).toFixed(0)}` },
+          { label: 'Avg Deal Size', value: loading ? '—' : `$${Number(dash?.averageDealSize || 0).toFixed(0)}` },
         ].map(c => (
           <div key={c.label} className="stat-card card-hover">
             <span className="stat-card-label">{c.label}</span>
@@ -74,7 +77,7 @@ export default function SalesDashboard() {
         <div className="h-40">
           {!loading && (
             <Line data={{
-              labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month-1]} ${m.year}`) || [],
+              labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month - 1]} ${m.year}`) || [],
               datasets: [{ label: 'Revenue', data: dash?.monthlyTrend.map(m => m.revenue) || [], borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,0.1)', tension: 0.4, fill: true, pointBackgroundColor: '#eab308' }]
             }} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } }, y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } } } }} />
           )}
@@ -95,22 +98,22 @@ export default function SalesDashboard() {
         <div className="card mb-6 animate-slide-in">
           <h4 className="text-text-primary font-semibold mb-4">New Sale Record</h4>
           <form id="add-sale-form" onSubmit={submit} className="grid grid-cols-2 gap-3">
-            <select id="sale-product" className="input" value={form.productId} onChange={e => setForm(f=>({...f,productId:e.target.value}))} required>
+            <select id="sale-product" className="input" value={form.productId} onChange={e => setForm(f => ({ ...f, productId: e.target.value }))} required>
               <option value="">Select Product</option>
               {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <select id="sale-territory" className="input" value={form.territoryId} onChange={e => setForm(f=>({...f,territoryId:e.target.value}))} required>
+            <select id="sale-territory" className="input" value={form.territoryId} onChange={e => setForm(f => ({ ...f, territoryId: e.target.value }))} required>
               <option value="">Select Territory</option>
-              {dash?.territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <input className="input" placeholder="Revenue" type="number" step="0.01" value={form.revenue} onChange={e=>setForm(f=>({...f,revenue:e.target.value}))} required />
-            <input className="input" placeholder="Deals" type="number" value={form.deals} onChange={e=>setForm(f=>({...f,deals:e.target.value}))} required />
-            <input className="input" placeholder="Quantity" type="number" value={form.quantity} onChange={e=>setForm(f=>({...f,quantity:e.target.value}))} required />
-            <input className="input" type="date" value={form.saleDate} onChange={e=>{const d=new Date(e.target.value);setForm(f=>({...f,saleDate:e.target.value,month:String(d.getMonth()+1),year:String(d.getFullYear())}))}} required />
-            <input className="input" placeholder="Customer Name" value={form.customerName} onChange={e=>setForm(f=>({...f,customerName:e.target.value}))} required />
-            <input className="input" placeholder="Industry" value={form.customerIndustry} onChange={e=>setForm(f=>({...f,customerIndustry:e.target.value}))} />
-            <input className="input" placeholder="Location" value={form.customerLocation} onChange={e=>setForm(f=>({...f,customerLocation:e.target.value}))} />
-            <input className="input" placeholder="Contact" value={form.customerContact} onChange={e=>setForm(f=>({...f,customerContact:e.target.value}))} />
+            <input className="input" placeholder="Revenue" type="number" step="0.01" value={form.revenue} onChange={e => setForm(f => ({ ...f, revenue: e.target.value }))} required />
+            <input className="input" placeholder="Deals" type="number" value={form.deals} onChange={e => setForm(f => ({ ...f, deals: e.target.value }))} required />
+            <input className="input" placeholder="Quantity" type="number" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} required />
+            <input className="input" type="date" value={form.saleDate} onChange={e => { const d = new Date(e.target.value); setForm(f => ({ ...f, saleDate: e.target.value, month: String(d.getMonth() + 1), year: String(d.getFullYear()) })) }} required />
+            <input className="input" placeholder="Customer Name" value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} required />
+            <input className="input" placeholder="Industry" value={form.customerIndustry} onChange={e => setForm(f => ({ ...f, customerIndustry: e.target.value }))} />
+            <input className="input" placeholder="Location" value={form.customerLocation} onChange={e => setForm(f => ({ ...f, customerLocation: e.target.value }))} />
+            <input className="input" placeholder="Contact" value={form.customerContact} onChange={e => setForm(f => ({ ...f, customerContact: e.target.value }))} />
             <button id="submit-sale" type="submit" disabled={submitting} className="btn-primary col-span-2 justify-center">
               {submitting ? 'Saving...' : 'Add Sale Record'}
             </button>

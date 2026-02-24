@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { verifyToken } from '../middleware/auth';
+import { supabase } from '../config/supabase';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(verifyToken);
 
@@ -15,46 +14,57 @@ router.get('/territories', async (req: Request, res: Response): Promise<void> =>
     // SALES role: restrict to assigned territories only
     let allowedTerritoryIds: string[] | undefined;
     if (req.user!.role === 'SALES') {
-      const assignments = await prisma.salesRepTerritory.findMany({
-        where: { salesRepId: req.user!.userId },
-        select: { territoryId: true },
-      });
-      allowedTerritoryIds = assignments.map((a) => a.territoryId);
+      const { data: assignments } = await supabase
+        .from('SalesRepTerritory')
+        .select('territoryId')
+        .eq('salesRepId', req.user!.userId);
+      allowedTerritoryIds = (assignments || []).map((a: any) => a.territoryId as string);
     }
 
-    // Build dynamic where clause
-    const saleWhere: Record<string, unknown> = {};
-    if (allowedTerritoryIds) saleWhere.territoryId = { in: allowedTerritoryIds };
-    if (startDate || endDate) {
-      saleWhere.saleDate = {
-        ...(startDate ? { gte: new Date(startDate as string) } : {}),
-        ...(endDate ? { lte: new Date(endDate as string) } : {}),
-      };
-    }
-    if (productId) saleWhere.productId = productId;
-    if (filterRepId && req.user!.role !== 'SALES') saleWhere.salesRepId = filterRepId;
+    // Fetch all relevant sales using explicit any to avoid TS chain issues
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let salesQuery: any = supabase
+      .from('Sale')
+      .select('territoryId, revenue, deals');
 
-    const aggregated = await prisma.sale.groupBy({
-      by: ['territoryId'],
-      where: saleWhere,
-      _sum: { revenue: true },
-      _count: { id: true },
-    });
+    if (allowedTerritoryIds && allowedTerritoryIds.length > 0) {
+      salesQuery = salesQuery.in('territoryId', allowedTerritoryIds);
+    } else if (allowedTerritoryIds && allowedTerritoryIds.length === 0) {
+      // No territories assigned — return empty
+      res.json([]);
+      return;
+    }
+    if (startDate) salesQuery = salesQuery.gte('saleDate', startDate as string);
+    if (endDate) salesQuery = salesQuery.lte('saleDate', endDate as string);
+    if (productId) salesQuery = salesQuery.eq('productId', productId as string);
+    if (filterRepId && req.user!.role !== 'SALES') salesQuery = salesQuery.eq('salesRepId', filterRepId as string);
+
+    const { data: salesData } = await salesQuery;
+
+    // Aggregate revenue & deals per territory in JS
+    const aggMap: Record<string, { revenue: number; deals: number }> = {};
+    for (const s of (salesData || []) as any[]) {
+      if (!aggMap[s.territoryId]) aggMap[s.territoryId] = { revenue: 0, deals: 0 };
+      aggMap[s.territoryId].revenue += Number(s.revenue || 0);
+      aggMap[s.territoryId].deals += 1;
+    }
 
     // Determine revenue buckets for color coding
-    const revenues = aggregated.map((a) => Number(a._sum.revenue || 0));
+    const revenues = Object.values(aggMap).map((a) => a.revenue);
     const max = Math.max(...revenues, 1);
     const highThreshold = max * 0.66;
     const midThreshold = max * 0.33;
 
-    const territories = await prisma.territory.findMany({
-      where: allowedTerritoryIds ? { id: { in: allowedTerritoryIds } } : undefined,
-    });
+    // Fetch territories
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let terrQuery: any = supabase.from('Territory').select('*');
+    if (allowedTerritoryIds) terrQuery = terrQuery.in('id', allowedTerritoryIds);
+    const { data: territories } = await terrQuery;
 
-    const result = territories.map((t) => {
-      const agg = aggregated.find((a) => a.territoryId === t.id);
-      const revenue = Number(agg?._sum?.revenue || 0);
-      const deals = agg?._count?.id || 0;
+    const result = ((territories || []) as any[]).map((t) => {
+      const agg = aggMap[t.id];
+      const revenue = agg?.revenue || 0;
+      const deals = agg?.deals || 0;
       const colorBucket =
         revenue >= highThreshold ? 'HIGH' : revenue >= midThreshold ? 'MEDIUM' : 'LOW';
 
@@ -67,7 +77,7 @@ router.get('/territories', async (req: Request, res: Response): Promise<void> =>
         longitude: t.longitude,
         revenue,
         deals,
-        colorBucket, // 'HIGH' | 'MEDIUM' | 'LOW'
+        colorBucket,
       };
     });
 
