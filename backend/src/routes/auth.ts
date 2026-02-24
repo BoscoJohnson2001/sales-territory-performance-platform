@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { ENV } from '../config/env';
+import { supabase } from '../config/supabase';
 import { verifyToken } from '../middleware/auth';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // POST /api/auth/login — login by email OR userCode
 router.post('/login', async (req: Request, res: Response): Promise<void> => {
@@ -17,17 +16,20 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: identifier.toLowerCase() },
-          { userCode: identifier.toUpperCase() },
-        ],
-      },
-      include: { role: true },
-    });
+    // Find user by email or userCode
+    const { data: users, error } = await supabase
+      .from('User')
+      .select('*, Role(*)')
+      .or(`email.eq.${identifier.toLowerCase()},userCode.eq.${identifier.toUpperCase()}`);
 
-    if (!user || !user.passwordHash) {
+    if (error || !users || users.length === 0) {
+      res.status(401).json({ message: 'Invalid credentials' });
+      return;
+    }
+
+    const user = users[0];
+
+    if (!user.passwordHash) {
       res.status(401).json({ message: 'Invalid credentials' });
       return;
     }
@@ -47,7 +49,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       {
         userId: user.id,
         email: user.email,
-        role: user.role.name,
+        role: user.Role.name,
         userCode: user.userCode,
       },
       ENV.JWT_SECRET,
@@ -62,7 +64,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        role: user.role.name,
+        role: user.Role.name,
         isFirstLogin: user.isFirstLogin,
       },
     });
@@ -81,30 +83,33 @@ router.post('/set-password', async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const user = await prisma.user.findFirst({
-      where: { onboardingToken: token },
-    });
+    const { data: users, error } = await supabase
+      .from('User')
+      .select('*')
+      .eq('onboardingToken', token);
 
-    if (!user) {
+    if (error || !users || users.length === 0) {
       res.status(400).json({ message: 'Invalid or expired token' });
       return;
     }
 
-    if (user.onboardingTokenExpiry && user.onboardingTokenExpiry < new Date()) {
+    const user = users[0];
+
+    if (user.onboardingTokenExpiry && new Date(user.onboardingTokenExpiry) < new Date()) {
       res.status(400).json({ message: 'Token has expired. Contact your admin.' });
       return;
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
+    await supabase
+      .from('User')
+      .update({
         passwordHash,
         isFirstLogin: false,
         onboardingToken: null,
         onboardingTokenExpiry: null,
-      },
-    });
+      })
+      .eq('id', user.id);
 
     res.json({ message: 'Password set successfully. You can now log in.' });
   } catch (err) {
@@ -116,26 +121,26 @@ router.post('/set-password', async (req: Request, res: Response): Promise<void> 
 // GET /api/auth/me — get current authenticated user info
 router.get('/me', verifyToken, async (req: Request, res: Response): Promise<void> => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user!.userId },
-      include: {
-        role: true,
-        territories: { include: { territory: true } },
-      },
-    });
-    if (!user) {
+    const { data: users } = await supabase
+      .from('User')
+      .select('*, Role(*), SalesRepTerritory(*, Territory(*))')
+      .eq('id', req.user!.userId);
+
+    if (!users || users.length === 0) {
       res.status(404).json({ message: 'User not found' });
       return;
     }
+
+    const user = users[0];
     res.json({
       id: user.id,
       userCode: user.userCode,
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email,
-      role: user.role.name,
+      role: user.Role.name,
       isFirstLogin: user.isFirstLogin,
-      territories: user.territories.map((t) => t.territory),
+      territories: (user.SalesRepTerritory || []).map((t: any) => t.Territory),
     });
   } catch {
     res.status(500).json({ message: 'Internal server error' });

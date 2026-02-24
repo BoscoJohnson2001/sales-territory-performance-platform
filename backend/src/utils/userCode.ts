@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { supabase } from '../config/supabase';
 
 const ROLE_PREFIX: Record<string, string> = {
   ADMIN: 'AD',
@@ -11,21 +9,20 @@ const ROLE_PREFIX: Record<string, string> = {
 /**
  * Auto-generates the next userCode for a given role.
  * Pattern: SL_001, SL_002, AD_001, MP_001 etc.
- * Safe to call concurrently — uses latest createdAt ordering.
  */
 export async function generateUserCode(roleName: string): Promise<string> {
   const prefix = ROLE_PREFIX[roleName.toUpperCase()] || 'US';
 
-  const latestUser = await prisma.user.findFirst({
-    where: {
-      userCode: { startsWith: `${prefix}_` },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const { data: users } = await supabase
+    .from('User')
+    .select('userCode')
+    .like('userCode', `${prefix}_%`)
+    .order('createdAt', { ascending: false })
+    .limit(1);
 
   let nextNumber = 1;
-  if (latestUser?.userCode) {
-    const parts = latestUser.userCode.split('_');
+  if (users && users.length > 0 && users[0].userCode) {
+    const parts = users[0].userCode.split('_');
     nextNumber = parseInt(parts[1] || '0', 10) + 1;
   }
 

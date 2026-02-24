@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { supabase } from '../config/supabase';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.use(verifyToken, requireRole('SALES', 'ADMIN'));
 
@@ -30,39 +30,56 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     // SALES role: verify territory is assigned to them
     if (req.user!.role === 'SALES') {
-      const assignment = await prisma.salesRepTerritory.findFirst({
-        where: { salesRepId, territoryId },
-      });
-      if (!assignment) {
+      const { data: assignments } = await supabase
+        .from('SalesRepTerritory')
+        .select('id')
+        .eq('salesRepId', salesRepId)
+        .eq('territoryId', territoryId);
+
+      if (!assignments || assignments.length === 0) {
         res.status(403).json({ message: 'Territory not assigned to you' });
         return;
       }
     }
 
-    const customer = await prisma.customer.create({
-      data: {
-        name: customerName,
-        industry: customerIndustry || null,
-        location: customerLocation || null,
-        contact: customerContact || null,
-      },
+    const customerId = crypto.randomUUID();
+    const { error: custError } = await supabase.from('Customer').insert({
+      id: customerId,
+      name: customerName,
+      industry: customerIndustry || null,
+      location: customerLocation || null,
+      contact: customerContact || null,
     });
 
-    const sale = await prisma.sale.create({
-      data: {
+    if (custError) {
+      console.error('[SALES] Customer create error:', custError);
+      res.status(500).json({ message: 'Failed to create customer' });
+      return;
+    }
+
+    const { data: sale, error: saleError } = await supabase
+      .from('Sale')
+      .insert({
+        id: crypto.randomUUID(),
         revenue,
         deals: parseInt(deals),
         quantity: parseInt(quantity),
-        saleDate: new Date(saleDate),
+        saleDate: new Date(saleDate).toISOString(),
         month: parseInt(month),
         year: parseInt(year),
         territoryId,
         salesRepId,
         productId,
-        customerId: customer.id,
-      },
-      include: { territory: true, product: true, customer: true },
-    });
+        customerId,
+      })
+      .select('*, Territory(*), Product(*), Customer(*)')
+      .single();
+
+    if (saleError || !sale) {
+      console.error('[SALES] Create sale error:', saleError);
+      res.status(500).json({ message: 'Internal server error' });
+      return;
+    }
 
     res.status(201).json(sale);
   } catch (err) {
@@ -73,23 +90,56 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
 // GET /api/sales — get sales (SALES role: own only; ADMIN: all)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
-  const salesRepId = req.user!.role === 'SALES' ? req.user!.userId : undefined;
   const page = parseInt((req.query.page as string) || '1');
   const limit = parseInt((req.query.limit as string) || '20');
-  const where = salesRepId ? { salesRepId } : {};
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
 
-  const [sales, total] = await Promise.all([
-    prisma.sale.findMany({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      include: { territory: true, product: true, customer: true },
-      orderBy: { saleDate: 'desc' },
-    }),
-    prisma.sale.count({ where }),
-  ]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
+    .from('Sale')
+    .select('*, Territory(*), Product(*), Customer(*)', { count: 'exact' })
+    .order('saleDate', { ascending: false })
+    .range(from, to);
 
-  res.json({ sales, total, page, pages: Math.ceil(total / limit) });
+  if (req.user!.role === 'SALES') {
+    query = query.eq('salesRepId', req.user!.userId);
+  }
+
+  const { data: sales, count, error } = await query;
+
+  if (error) {
+    res.status(500).json({ message: 'Failed to fetch sales' });
+    return;
+  }
+
+  const total = count || 0;
+  res.json({ sales: sales || [], total, page, pages: Math.ceil(total / limit) });
+});
+
+// GET /api/sales/products — product list for sale form dropdowns (SALES + ADMIN)
+router.get('/products', async (_req: Request, res: Response): Promise<void> => {
+  const { data, error } = await supabase
+    .from('Product')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) { res.status(500).json({ message: 'Failed to fetch products' }); return; }
+  res.json(data || []);
+});
+
+// GET /api/sales/territories — territories for sale form dropdowns (SALES: own only, ADMIN: all)
+router.get('/territories', async (req: Request, res: Response): Promise<void> => {
+  if (req.user!.role === 'SALES') {
+    const { data: assignments } = await supabase
+      .from('SalesRepTerritory')
+      .select('Territory(*)')
+      .eq('salesRepId', req.user!.userId);
+    const territories = (assignments || []).map((a: any) => a.Territory);
+    res.json(territories);
+    return;
+  }
+  const { data } = await supabase.from('Territory').select('*').order('name', { ascending: true });
+  res.json(data || []);
 });
 
 export default router;

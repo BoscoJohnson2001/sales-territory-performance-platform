@@ -1,7 +1,16 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { ENV } from '../config/env';
 
-const resend = new Resend(ENV.RESEND_API_KEY);
+// Create reusable transporter
+const transporter = nodemailer.createTransport({
+  host: ENV.SMTP_HOST,
+  port: ENV.SMTP_PORT,
+  secure: ENV.SMTP_PORT === 465, // true for 465, false for 587
+  auth: {
+    user: ENV.SMTP_USER,
+    pass: ENV.SMTP_PASS,
+  },
+});
 
 export async function sendOnboardingEmail(
   to: string,
@@ -10,8 +19,8 @@ export async function sendOnboardingEmail(
 ): Promise<void> {
   const setPasswordUrl = `${ENV.FRONTEND_URL}/set-password?token=${token}`;
 
-  await resend.emails.send({
-    from: 'Pfizer Sales Platform <noreply@pfizer-sales.com>',
+  await transporter.sendMail({
+    from: ENV.SMTP_FROM,
     to,
     subject: 'Welcome to Pfizer Sales Platform — Set Your Password',
     html: `
@@ -20,7 +29,7 @@ export async function sendOnboardingEmail(
                   border: 1px solid #1f2937;">
         <div style="display: flex; align-items: center; margin-bottom: 32px;">
           <div style="width: 36px; height: 36px; background: #eab308; border-radius: 8px;
-                      display: flex; align-items: center; justify-content: center;
+                      display: inline-flex; align-items: center; justify-content: center;
                       font-weight: 900; font-size: 18px; color: #000; margin-right: 12px;">P</div>
           <span style="font-size: 18px; font-weight: 700; color: #f9fafb;">Pfizer Sales Platform</span>
         </div>
@@ -44,7 +53,7 @@ export async function sendOnboardingEmail(
         </a>
 
         <p style="color: #6b7280; font-size: 13px; margin-bottom: 4px;">
-          If the button doesn’t work, copy and paste this link:
+          If the button doesn't work, copy and paste this link:
         </p>
         <p style="color: #4b5563; font-size: 12px; word-break: break-all; margin-bottom: 32px;">
           ${setPasswordUrl}
