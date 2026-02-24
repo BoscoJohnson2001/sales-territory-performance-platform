@@ -16,7 +16,12 @@ interface DashData {
 }
 interface Product { id: string; name: string; }
 interface Territory { id: string; name: string; }
-interface Sale { id: string; saleDate: string; revenue: string; deals: number; territory: { name: string }; product: { name: string }; customer: { name: string }; }
+interface Sale {
+  id: string; saleDate: string; revenue: string; deals: number;
+  Territory?: { name: string };
+  Product?: { name: string };
+  Customer?: { name: string };
+}
 
 export default function SalesDashboard() {
   const [dash, setDash] = useState<DashData | null>(null);
@@ -130,11 +135,11 @@ export default function SalesDashboard() {
               {sales.map(s => (
                 <tr key={s.id} className="tr-hover">
                   <td className="td text-text-muted text-xs">{new Date(s.saleDate).toLocaleDateString()}</td>
-                  <td className="td">{s.product.name}</td>
-                  <td className="td">{s.territory.name}</td>
+                  <td className="td">{s.Product?.name ?? '—'}</td>
+                  <td className="td">{s.Territory?.name ?? '—'}</td>
                   <td className="td text-accent font-semibold">${parseFloat(s.revenue).toLocaleString()}</td>
                   <td className="td">{s.deals}</td>
-                  <td className="td text-text-muted">{s.customer.name}</td>
+                  <td className="td text-text-muted">{s.Customer?.name ?? '—'}</td>
                 </tr>
               ))}
               {sales.length === 0 && !loading && (

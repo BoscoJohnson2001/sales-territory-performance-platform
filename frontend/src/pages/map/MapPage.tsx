@@ -12,12 +12,14 @@ const COLOR_MAP = { HIGH: '#22c55e', MEDIUM: '#f59e0b', LOW: '#ef4444' };
 const LABEL_MAP = { HIGH: '🟢 High Revenue', MEDIUM: '🟡 Medium Revenue', LOW: '🔴 Low Revenue' };
 
 export default function MapPage() {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMap = useRef<unknown>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
   const [territories, setTerritories] = useState<TerritoryData[]>([]);
   const [selected, setSelected] = useState<TerritoryData | null>(null);
   const [heatmap, setHeatmap] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     client.get('/api/map/territories').then(r => {
@@ -25,31 +27,60 @@ export default function MapPage() {
     }).catch(() => setLoading(false));
   }, []);
 
-  // Initialize Leaflet map
+  // Initialize Leaflet map — safe against StrictMode double-mount
   useEffect(() => {
-    if (!mapRef.current || leafletMap.current) return;
-    // Dynamically import Leaflet to avoid SSR issues
+    let destroyed = false;
+
     import('leaflet').then(L => {
-      const map = L.map(mapRef.current!, { center: [39.5, -98.35], zoom: 4, zoomControl: true });
+      if (destroyed || !mapContainerRef.current) return;
+
+      // Guard: if this container already has a Leaflet instance, remove it first
+      const container = mapContainerRef.current as any;
+      if (container._leaflet_id) {
+        mapInstanceRef.current?.remove();
+        mapInstanceRef.current = null;
+      }
+
+      const map = L.map(mapContainerRef.current, {
+        center: [39.5, -98.35],
+        zoom: 4,
+        zoomControl: true,
+      });
+
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-        subdomains: 'abcd', maxZoom: 19
+        subdomains: 'abcd',
+        maxZoom: 19,
       }).addTo(map);
-      leafletMap.current = map;
+
+      mapInstanceRef.current = map;
+      setMapReady(true); // ← triggers markers effect even if territories already loaded
     });
+
     return () => {
-      if (leafletMap.current) {
-        (leafletMap.current as { remove: () => void }).remove();
-        leafletMap.current = null;
+      destroyed = true;
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        setMapReady(false);
       }
+      markersRef.current = [];
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Add markers when territories load
+  // Add/refresh markers — fires when map is ready OR territories/heatmap change
   useEffect(() => {
-    if (!leafletMap.current || territories.length === 0) return;
+    if (!mapReady || !mapInstanceRef.current || territories.length === 0) return;
+
     import('leaflet').then(L => {
-      const map = leafletMap.current as ReturnType<typeof L.map>;
+      if (!mapInstanceRef.current) return;
+      const map = mapInstanceRef.current;
+
+      // Clear existing markers
+      markersRef.current.forEach(m => m.remove());
+      markersRef.current = [];
+
       territories.forEach(t => {
         if (!t.latitude || !t.longitude) return;
         const color = heatmap ? COLOR_MAP[t.colorBucket] : '#3b82f6';
@@ -57,11 +88,15 @@ export default function MapPage() {
           radius: 10, fillColor: color, color: '#fff', weight: 1.5,
           opacity: 1, fillOpacity: 0.85,
         }).addTo(map);
-        marker.bindTooltip(`<b>${t.name}</b><br />$${t.revenue.toLocaleString()}`, { className: 'leaflet-tooltip-dark' });
+        marker.bindTooltip(
+          `<b>${t.name}</b><br />$${t.revenue.toLocaleString()}`,
+          { className: 'leaflet-tooltip-dark' }
+        );
         marker.on('click', () => setSelected(t));
+        markersRef.current.push(marker);
       });
     });
-  }, [territories, heatmap]);
+  }, [territories, heatmap, mapReady]);
 
   return (
     <Layout title="Territory Map" subtitle="USA District Revenue — Click a territory for details">
@@ -86,7 +121,7 @@ export default function MapPage() {
       <div className="grid md:grid-cols-3 gap-4" style={{ height: 'calc(100vh - 230px)' }}>
         {/* Map */}
         <div className="md:col-span-2 rounded-card overflow-hidden border border-bg-border" style={{ minHeight: 400 }}>
-          <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+          <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
         </div>
 
         {/* Territory Detail Panel */}
@@ -114,7 +149,7 @@ export default function MapPage() {
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="stat-card-label">Status</span>
-                  <span className={`badge-${selected.colorBucket.toLowerCase() as 'high'|'medium'|'low'} self-start`}>
+                  <span className={`badge-${selected.colorBucket.toLowerCase() as 'high' | 'medium' | 'low'} self-start`}>
                     {LABEL_MAP[selected.colorBucket]}
                   </span>
                 </div>
