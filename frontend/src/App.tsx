@@ -7,11 +7,13 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import ManagementDashboard from './pages/management/ManagementDashboard';
 import SalesDashboard from './pages/sales/SalesDashboard';
 import MapPage from './pages/map/MapPage';
+import TerritoryPerformancePage from './pages/territory/TerritoryPerformancePage';
+import TerritoryDetailPage from './pages/territory/TerritoryDetailPage';
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename={import.meta.env.PROD ? '/sales-territory-performance-platform' : '/'}>
+      <BrowserRouter basename={(import.meta as any).env?.PROD ? '/sales-territory-performance-platform' : '/'}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/set-password" element={<SetPasswordPage />} />
@@ -22,7 +24,11 @@ export default function App() {
           <Route path="/sales/dashboard"
             element={<ProtectedRoute roles={['SALES']}><SalesDashboard /></ProtectedRoute>} />
           <Route path="/map"
-            element={<ProtectedRoute roles={['ADMIN','MANAGEMENT','SALES']}><MapPage /></ProtectedRoute>} />
+            element={<ProtectedRoute roles={['ADMIN', 'MANAGEMENT', 'SALES']}><MapPage /></ProtectedRoute>} />
+          <Route path="/territory-performance"
+            element={<ProtectedRoute roles={['MANAGEMENT', 'SALES']}><TerritoryPerformancePage /></ProtectedRoute>} />
+          <Route path="/territory-performance/:id"
+            element={<ProtectedRoute roles={['MANAGEMENT', 'SALES']}><TerritoryDetailPage /></ProtectedRoute>} />
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
@@ -30,3 +36,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+

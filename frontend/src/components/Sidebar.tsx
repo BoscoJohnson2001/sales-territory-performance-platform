@@ -2,10 +2,11 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const NAV: { label: string; to: string; icon: string; roles: string[] }[] = [
-  { label: 'Map',           to: '/map',                  icon: '🗺️', roles: ['ADMIN','MANAGEMENT','SALES'] },
-  { label: 'Dashboard',    to: '/admin/dashboard',       icon: '📊', roles: ['ADMIN'] },
-  { label: 'Dashboard',    to: '/management/dashboard',  icon: '📊', roles: ['MANAGEMENT'] },
-  { label: 'My Stats',     to: '/sales/dashboard',       icon: '📊', roles: ['SALES'] },
+  { label: 'Map', to: '/map', icon: '🗺️', roles: ['ADMIN', 'MANAGEMENT', 'SALES'] },
+  { label: 'Dashboard', to: '/admin/dashboard', icon: '📊', roles: ['ADMIN'] },
+  { label: 'Dashboard', to: '/management/dashboard', icon: '📊', roles: ['MANAGEMENT'] },
+  { label: 'My Stats', to: '/sales/dashboard', icon: '📊', roles: ['SALES'] },
+  { label: 'Territory Performance', to: '/territory-performance', icon: '📍', roles: ['MANAGEMENT', 'SALES'] },
 ];
 
 export default function Sidebar() {

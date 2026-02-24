@@ -6,7 +6,7 @@ import client from '../../api/client';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
 
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface Territory { territoryId: string; name: string; revenue: number; deals: number; insight: string | null; }
 interface DashData {
@@ -34,13 +34,13 @@ export default function ManagementDashboard() {
   const monthlyRevs = data?.monthlyTrend.map(m => m.revenue) || [];
 
   return (
-    <Layout title="Management Dashboard" subtitle="Revenue Intelligence — USA District-Wise">
+    <Layout title="Management Dashboard" subtitle="Revenue Intelligence — Indian District-Wise">
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Revenue', value: loading ? '—' : `$${Number(data?.totalRevenue||0).toLocaleString()}`, sub: 'All territories' },
+          { label: 'Total Revenue', value: loading ? '—' : `$${Number(data?.totalRevenue || 0).toLocaleString()}`, sub: 'All territories' },
           { label: 'Total Deals', value: loading ? '—' : data?.totalDeals ?? 0, sub: 'Closed deals' },
-          { label: 'Top Region', value: loading ? '—' : Object.entries(data?.revenueByRegion||{}).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—', sub: 'By revenue' },
+          { label: 'Top Region', value: loading ? '—' : Object.entries(data?.revenueByRegion || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '—', sub: 'By revenue' },
           { label: 'Territories', value: loading ? '—' : (data?.top5Territories.length ?? 0) + (data?.bottom5Territories.length ?? 0), sub: 'With sales data' },
         ].map(c => (
           <div key={c.label} className="stat-card card-hover">
@@ -72,7 +72,7 @@ export default function ManagementDashboard() {
             {loading ? <div className="flex items-center justify-center h-full text-text-muted text-sm">Loading...</div> : (
               <Doughnut data={{
                 labels: Object.keys(data?.revenueByRegion || {}),
-                datasets: [{ data: Object.values(data?.revenueByRegion || {}), backgroundColor: ['#eab308','#3b82f6','#22c55e','#ef4444','#8b5cf6','#f59e0b'], borderWidth: 0 }]
+                datasets: [{ data: Object.values(data?.revenueByRegion || {}), backgroundColor: ['#eab308', '#3b82f6', '#22c55e', '#ef4444', '#8b5cf6', '#f59e0b'], borderWidth: 0 }]
               }} options={{ ...chartOpts, scales: undefined } as Parameters<typeof Doughnut>[0]['options']} />
             )}
           </div>

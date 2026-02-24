@@ -71,6 +71,7 @@ export default function MapPage() {
   const allowedAllRef = useRef(true);
   const heatmapRef = useRef(true);
   const highlightRef = useRef<any>(null); // currently highlighted layer
+  const activeTooltipLayerRef = useRef<any>(null); // layer whose tooltip is currently open
 
   const [heatmap, setHeatmap] = useState(true);
   const [mapReady, setMapReady] = useState(false);
@@ -210,16 +211,25 @@ export default function MapPage() {
             (data
               ? `<div style="margin-top:4px">Revenue: <b>$${data.revenue.toLocaleString()}</b></div><div>Deals: ${data.deals}</div>`
               : `<div style="opacity:.5;margin-top:4px">No sales data</div>`),
-            { className: 'map-tooltip', sticky: true, direction: 'auto' }
+            { className: 'map-tooltip', sticky: false, direction: 'auto' }
           );
 
           flayer.on({
             mouseover: (e: any) => {
+              // Close any previously open tooltip before opening the new one
+              if (activeTooltipLayerRef.current && activeTooltipLayerRef.current !== e.target) {
+                activeTooltipLayerRef.current.closeTooltip();
+              }
+              activeTooltipLayerRef.current = e.target;
+              e.target.openTooltip();
+
               if (highlightRef.current !== e.target)
                 e.target.setStyle({ weight: 2.5, fillOpacity: Math.min((e.target.options.fillOpacity || .3) + .2, 1) });
               e.target.bringToFront();
             },
             mouseout: (e: any) => {
+              e.target.closeTooltip();
+              if (activeTooltipLayerRef.current === e.target) activeTooltipLayerRef.current = null;
               if (highlightRef.current !== e.target) layer.resetStyle(e.target);
             },
             click: () => {

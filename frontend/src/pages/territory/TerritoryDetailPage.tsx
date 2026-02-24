@@ -1,0 +1,235 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import Layout from '../../components/Layout';
+import client from '../../api/client';
+import {
+    Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
+    BarElement, Title, Tooltip, Legend,
+} from 'chart.js';
+import { Line, Bar } from 'react-chartjs-2';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmt = (n: number) => `$${n.toLocaleString()}`;
+
+interface MonthlyPoint { year: number; month: number; revenue: number; deals: number; }
+interface Product { id: string; name: string; category: string; revenue: number; }
+interface Customer { id: string; name: string; industry: string; location: string; revenue: number; }
+interface Rep { id: string; displayName: string; userCode: string; }
+interface TerritoryDetail {
+    territory: { id: string; name: string; state: string; region: string; };
+    totalRevenue: number; totalDeals: number; avgDealSize: number;
+    monthlyTrend: MonthlyPoint[];
+    topProducts: Product[];
+    topCustomers: Customer[];
+    assignedReps: Rep[];
+}
+
+const chartOpts: any = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { bodyFont: { family: 'Inter' } } },
+    scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
+        y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 }, callback: (v: any) => `$${Number(v).toLocaleString()}` } },
+    },
+};
+
+export default function TerritoryDetailPage() {
+    const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
+    const [data, setData] = useState<TerritoryDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!id) return;
+        setLoading(true);
+        client.get<TerritoryDetail>(`/api/territory-performance/${id}`)
+            .then(r => { setData(r.data); setLoading(false); })
+            .catch(err => {
+                setError(err.response?.data?.message || 'Failed to load territory details.');
+                setLoading(false);
+            });
+    }, [id]);
+
+    if (loading) return (
+        <Layout title="Territory Details" subtitle="Loading…">
+            <div className="flex items-center justify-center h-64 gap-3">
+                <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <span className="text-text-muted text-sm">Fetching territory data…</span>
+            </div>
+        </Layout>
+    );
+
+    if (error || !data) return (
+        <Layout title="Territory Details" subtitle="Error">
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
+                <span className="text-4xl">⛔</span>
+                <p className="text-text-primary font-semibold">{error || 'Territory not found'}</p>
+                <button onClick={() => navigate('/territory-performance')} className="btn-secondary text-xs py-1.5">
+                    ← Back to Territories
+                </button>
+            </div>
+        </Layout>
+    );
+
+    const { territory, totalRevenue, totalDeals, avgDealSize, monthlyTrend, topProducts, topCustomers, assignedReps } = data;
+
+    // Chart data
+    const chartLabels = monthlyTrend.map(p => `${MONTHS[p.month - 1]} ${p.year}`);
+    const revenueData = monthlyTrend.map(p => p.revenue);
+    const dealsData = monthlyTrend.map(p => p.deals);
+
+    return (
+        <Layout
+            title={territory.name}
+            subtitle={`${territory.state}${territory.region ? ` · ${territory.region}` : ''} — Territory Performance`}>
+
+            {/* Back button */}
+            <button onClick={() => navigate('/territory-performance')}
+                className="btn-secondary text-xs py-1.5 mb-5 inline-flex items-center gap-1">
+                ← Back to Territories
+            </button>
+
+            {/* KPI Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="stat-card">
+                    <span className="stat-card-label">Total Revenue</span>
+                    <span className="stat-card-value text-accent">{totalRevenue > 0 ? fmt(totalRevenue) : '—'}</span>
+                    <span className="stat-card-sub">Across all periods</span>
+                </div>
+                <div className="stat-card">
+                    <span className="stat-card-label">Total Deals</span>
+                    <span className="stat-card-value">{totalDeals || '—'}</span>
+                    <span className="stat-card-sub">Closed deals</span>
+                </div>
+                <div className="stat-card">
+                    <span className="stat-card-label">Avg Deal Size</span>
+                    <span className="stat-card-value">{avgDealSize > 0 ? fmt(avgDealSize) : '—'}</span>
+                    <span className="stat-card-sub">Revenue ÷ Deals</span>
+                </div>
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-5">
+
+                {/* Monthly Revenue Trend */}
+                <div className="lg:col-span-2 card">
+                    <h3 className="text-text-primary text-sm font-semibold mb-4">Monthly Revenue Trend</h3>
+                    {monthlyTrend.length > 0 ? (
+                        <div style={{ height: 220 }}>
+                            <Line
+                                data={{
+                                    labels: chartLabels,
+                                    datasets: [{
+                                        data: revenueData,
+                                        borderColor: '#eab308', backgroundColor: '#eab30820',
+                                        fill: true, tension: 0.4, pointRadius: 4,
+                                        pointBackgroundColor: '#eab308',
+                                    }],
+                                }}
+                                options={chartOpts}
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-center h-[220px] text-text-subtle text-sm">No sales data yet</div>
+                    )}
+                </div>
+
+                {/* Assigned Sales Reps */}
+                <div className="card flex flex-col">
+                    <h3 className="text-text-primary text-sm font-semibold mb-4">Assigned Sales Reps</h3>
+                    {assignedReps.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                            {assignedReps.map(rep => (
+                                <div key={rep.id} className="flex items-center gap-3 p-2.5 bg-bg-hover rounded-lg border border-bg-border">
+                                    <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-accent text-sm font-bold flex-shrink-0">
+                                        {rep.displayName.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <p className="text-text-primary text-xs font-semibold">{rep.displayName}</p>
+                                        <p className="text-text-subtle text-[10px]">{rep.userCode}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-text-subtle text-xs text-center">
+                            No sales reps assigned to this territory
+                        </div>
+                    )}
+                </div>
+
+                {/* Deals Trend */}
+                {monthlyTrend.length > 0 && (
+                    <div className="card">
+                        <h3 className="text-text-primary text-sm font-semibold mb-4">Monthly Deals Volume</h3>
+                        <div style={{ height: 180 }}>
+                            <Bar
+                                data={{
+                                    labels: chartLabels,
+                                    datasets: [{
+                                        data: dealsData,
+                                        backgroundColor: '#3b82f640',
+                                        borderColor: '#3b82f6',
+                                        borderWidth: 1,
+                                        borderRadius: 4,
+                                    }],
+                                }}
+                                options={{
+                                    ...chartOpts,
+                                    scales: {
+                                        ...chartOpts.scales,
+                                        y: { ...chartOpts.scales.y, ticks: { ...chartOpts.scales.y.ticks, callback: (v: any) => v } },
+                                    },
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Top Products */}
+                <div className="card">
+                    <h3 className="text-text-primary text-sm font-semibold mb-4">Top Products</h3>
+                    {topProducts.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                            {topProducts.map((p, i) => (
+                                <div key={p.id} className="flex items-center gap-3">
+                                    <span className="text-text-subtle text-xs w-4">{i + 1}.</span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-text-primary text-xs font-medium truncate">{p.name}</p>
+                                        <p className="text-text-subtle text-[10px]">{p.category}</p>
+                                    </div>
+                                    <span className="text-accent text-xs font-semibold">{fmt(p.revenue)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-text-subtle text-xs">No product data available</p>
+                    )}
+                </div>
+
+                {/* Top Customers */}
+                <div className="card">
+                    <h3 className="text-text-primary text-sm font-semibold mb-4">Top Customers</h3>
+                    {topCustomers.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                            {topCustomers.map((c, i) => (
+                                <div key={c.id} className="flex items-center gap-3">
+                                    <span className="text-text-subtle text-xs w-4">{i + 1}.</span>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-text-primary text-xs font-medium truncate">{c.name}</p>
+                                        <p className="text-text-subtle text-[10px] truncate">{c.industry}{c.location ? ` · ${c.location}` : ''}</p>
+                                    </div>
+                                    <span className="text-accent text-xs font-semibold">{fmt(c.revenue)}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-text-subtle text-xs">No customer data available</p>
+                    )}
+                </div>
+            </div>
+        </Layout>
+    );
+}

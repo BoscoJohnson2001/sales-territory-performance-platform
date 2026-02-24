@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
 
-interface User { id: string; userCode: string; firstName: string; lastName: string; email: string; role: string; isActive: boolean; isFirstLogin: boolean; createdAt: string; territories: { name: string }[]; }
+interface User {
+  id: string; userCode: string; firstName: string; lastName: string;
+  displayName: string | null; email: string; role: string;
+  isActive: boolean; isFirstLogin: boolean; createdAt: string;
+  phoneNumber: string | null; joiningDate: string | null;
+  workStartTimeUtc: string | null; workEndTimeUtc: string | null;
+  territories: { name: string }[];
+}
 interface Product { id: string; name: string; category: string; price: string; }
 interface Territory { id: string; name: string; state: string; region: string; }
 interface AssignedTerritory extends Territory { assignmentId: string; assignedAt: string; }
@@ -14,9 +21,17 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState<'users' | 'products' | 'territories'>('users');
 
   // Create user form state
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '' });
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', displayName: '',
+    email: '', phoneNumber: '',
+    joiningDate: '', workStartTime: '', workEndTime: '',
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
+
+  // Auto-detect browser timezone
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   // Create product form state
   const [pForm, setPForm] = useState({ name: '', category: '', price: '' });
@@ -59,12 +74,35 @@ export default function AdminDashboard() {
       .finally(() => setLoadingAssigned(false));
   }, [selectedUserId]);
 
+  const validateForm = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!form.firstName.trim()) errs.firstName = 'First name is required';
+    if (!form.email.trim()) errs.email = 'Email is required';
+    if (form.phoneNumber && !form.phoneNumber.startsWith('+'))
+      errs.phoneNumber = 'Must include country code (e.g. +91…)';
+    if (form.joiningDate && new Date(form.joiningDate) > new Date())
+      errs.joiningDate = 'Joining date cannot be in the future';
+    if ((form.workStartTime && !form.workEndTime) || (!form.workStartTime && form.workEndTime))
+      errs.workTime = 'Provide both start and end time';
+    if (form.workStartTime && form.workEndTime) {
+      const [sh, sm] = form.workStartTime.split(':').map(Number);
+      const [eh, em] = form.workEndTime.split(':').map(Number);
+      if (eh * 60 + em <= sh * 60 + sm) errs.workTime = 'End time must be after start time';
+    }
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const createUser = async () => {
+    if (!validateForm()) return;
     setCreating(true); setCreateMsg('');
     try {
-      const res = await client.post('/api/admin/users', form);
+      const payload = { ...form, timezone: tz };
+      const res = await client.post('/api/admin/users', payload);
       setCreateMsg(`✅ Created: ${res.data.userCode} — Onboarding email sent.`);
-      setForm({ firstName: '', lastName: '', email: '' }); fetchData();
+      setForm({ firstName: '', lastName: '', displayName: '', email: '', phoneNumber: '', joiningDate: '', workStartTime: '', workEndTime: '' });
+      setFormErrors({});
+      fetchData();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
       setCreateMsg(`❌ ${msg || 'Failed to create user'}`);
@@ -158,9 +196,68 @@ export default function AdminDashboard() {
           <div className="card">
             <h3 className="text-text-primary font-semibold mb-4">Create Sales Rep</h3>
             <div className="flex flex-col gap-3">
-              <input id="new-user-first" className="input" placeholder="First Name" value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
-              <input id="new-user-last" className="input" placeholder="Last Name" value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
-              <input id="new-user-email" className="input" placeholder="Email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+
+              {/* Row 1: Names */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <input id="new-user-first" className={`input text-sm ${formErrors.firstName ? 'border-red-500' : ''}`}
+                    placeholder="First Name *" value={form.firstName}
+                    onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
+                  {formErrors.firstName && <p className="text-red-400 text-xs mt-0.5">{formErrors.firstName}</p>}
+                </div>
+                <input id="new-user-last" className="input text-sm" placeholder="Last Name"
+                  value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
+              </div>
+
+              {/* Display Name */}
+              <input id="new-user-display" className="input text-sm" placeholder="Display Name (auto if blank)"
+                value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} />
+
+              {/* Email */}
+              <div>
+                <input id="new-user-email" className={`input text-sm ${formErrors.email ? 'border-red-500' : ''}`}
+                  placeholder="Email *" type="email" value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                {formErrors.email && <p className="text-red-400 text-xs mt-0.5">{formErrors.email}</p>}
+              </div>
+
+              {/* Phone */}
+              <div>
+                <input id="new-user-phone" className={`input text-sm ${formErrors.phoneNumber ? 'border-red-500' : ''}`}
+                  placeholder="Phone with country code (e.g. +919876543210)"
+                  value={form.phoneNumber}
+                  onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))} />
+                {formErrors.phoneNumber
+                  ? <p className="text-red-400 text-xs mt-0.5">{formErrors.phoneNumber}</p>
+                  : <p className="text-text-subtle text-xs mt-0.5">Include country code e.g. +91…</p>}
+              </div>
+
+              {/* Joining Date */}
+              <div>
+                <label className="text-text-muted text-xs font-medium uppercase tracking-widest block mb-1">Joining Date</label>
+                <input id="new-user-joining" type="date" className={`input text-sm ${formErrors.joiningDate ? 'border-red-500' : ''}`}
+                  max={new Date().toISOString().split('T')[0]}
+                  value={form.joiningDate}
+                  onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))} />
+                {formErrors.joiningDate && <p className="text-red-400 text-xs mt-0.5">{formErrors.joiningDate}</p>}
+              </div>
+
+              {/* Working Hours */}
+              <div>
+                <label className="text-text-muted text-xs font-medium uppercase tracking-widest block mb-1">
+                  Working Hours <span className="text-text-subtle normal-case">({tz})</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <input id="new-user-start" type="time" className="input text-sm"
+                    value={form.workStartTime}
+                    onChange={e => setForm(f => ({ ...f, workStartTime: e.target.value }))} />
+                  <input id="new-user-end" type="time" className="input text-sm"
+                    value={form.workEndTime}
+                    onChange={e => setForm(f => ({ ...f, workEndTime: e.target.value }))} />
+                </div>
+                {formErrors.workTime && <p className="text-red-400 text-xs mt-0.5">{formErrors.workTime}</p>}
+              </div>
+
               <button id="create-user-btn" onClick={createUser} disabled={creating} className="btn-primary justify-center">
                 {creating ? 'Creating...' : 'Create & Send Email'}
               </button>
@@ -173,13 +270,34 @@ export default function AdminDashboard() {
             <h3 className="text-text-primary font-semibold mb-4">All Users</h3>
             <div className="table-wrapper">
               <table className="table">
-                <thead><tr><th className="th">Code</th><th className="th">Name</th><th className="th">Role</th><th className="th">Status</th><th className="th">Action</th></tr></thead>
+                <thead><tr>
+                  <th className="th">Code</th>
+                  <th className="th">Name</th>
+                  <th className="th">Role</th>
+                  <th className="th">Phone</th>
+                  <th className="th">Joining</th>
+                  <th className="th">Working Hours (Local)</th>
+                  <th className="th">Status</th>
+                  <th className="th">Action</th>
+                </tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id} className="tr-hover">
                       <td className="td font-mono text-accent text-xs">{u.userCode}</td>
-                      <td className="td">{u.firstName} {u.lastName}</td>
+                      <td className="td">
+                        <p className="text-text-primary text-xs font-medium">{u.displayName || `${u.firstName} ${u.lastName || ''}`}</p>
+                        <p className="text-text-subtle text-[10px]">{u.email}</p>
+                      </td>
                       <td className="td"><span className="badge-info">{u.role}</span></td>
+                      <td className="td text-xs text-text-muted">{u.phoneNumber || '—'}</td>
+                      <td className="td text-xs text-text-muted">
+                        {u.joiningDate ? new Date(u.joiningDate).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="td text-xs text-text-muted">
+                        {u.workStartTimeUtc && u.workEndTimeUtc
+                          ? `${new Date(u.workStartTimeUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${new Date(u.workEndTimeUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                          : '—'}
+                      </td>
                       <td className="td"><span className={u.isActive ? 'badge-high' : 'badge-low'}>{u.isActive ? 'Active' : 'Inactive'}</span></td>
                       <td className="td">
                         <button onClick={() => toggleActive(u.id, u.isActive)}

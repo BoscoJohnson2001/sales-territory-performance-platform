@@ -4,6 +4,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { generateUserCode } from '../utils/userCode';
 import { sendOnboardingEmail } from '../services/email';
 import { supabase } from '../config/supabase';
+import { fromZonedTime } from 'date-fns-tz';
 
 const router = Router();
 
@@ -28,7 +29,12 @@ router.get('/users', async (_req: Request, res: Response): Promise<void> => {
       userCode: u.userCode,
       firstName: u.firstName,
       lastName: u.lastName,
+      displayName: u.displayName || null,
       email: u.email,
+      phoneNumber: u.phoneNumber || null,
+      joiningDate: u.joiningDate || null,
+      workStartTimeUtc: u.workStartTimeUtc || null,
+      workEndTimeUtc: u.workEndTimeUtc || null,
       role: u.Role.name,
       isActive: u.isActive,
       isFirstLogin: u.isFirstLogin,
@@ -38,13 +44,61 @@ router.get('/users', async (_req: Request, res: Response): Promise<void> => {
   );
 });
 
+// ─── UTC conversion helper ────────────────────────────────────────────────────
+// Converts a local "HH:MM" time + IANA timezone to a UTC ISO string.
+// Uses date-fns-tz zonedTimeToUtc — single conversion, no manual offset math.
+function localTimeToUtc(timeHHMM: string, timezone: string, anchorDate?: string): string {
+  // Use provided anchor date (joiningDate if set) or today in UTC
+  const now = new Date();
+  const anchor = anchorDate || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  // Combine "YYYY-MM-DD HH:mm" and convert from given timezone to UTC
+  const result = fromZonedTime(`${anchor} ${timeHHMM}`, timezone);
+  return result.toISOString();
+}
+
 // POST /api/admin/users — create a new Sales Rep
 router.post('/users', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { firstName, lastName, email } = req.body;
+    const {
+      firstName, lastName, displayName,
+      email,
+      phoneNumber,
+      joiningDate,
+      workStartTime, workEndTime, timezone,
+    } = req.body;
+
     if (!firstName || !email) {
       res.status(400).json({ message: 'firstName and email are required' });
       return;
+    }
+
+    // Phone validation
+    if (phoneNumber && !String(phoneNumber).startsWith('+')) {
+      res.status(400).json({ message: 'phoneNumber must include country code (start with +)' });
+      return;
+    }
+
+    // Joining date: cannot be in the future
+    if (joiningDate) {
+      const jd = new Date(joiningDate);
+      if (jd > new Date()) {
+        res.status(400).json({ message: 'joiningDate cannot be a future date' });
+        return;
+      }
+    }
+
+    // Work hours validation
+    if ((workStartTime && !workEndTime) || (!workStartTime && workEndTime)) {
+      res.status(400).json({ message: 'Provide both workStartTime and workEndTime' });
+      return;
+    }
+    if (workStartTime && workEndTime) {
+      const [sh, sm] = workStartTime.split(':').map(Number);
+      const [eh, em] = workEndTime.split(':').map(Number);
+      if (eh * 60 + em <= sh * 60 + sm) {
+        res.status(400).json({ message: 'workEndTime must be after workStartTime' });
+        return;
+      }
     }
 
     const { data: existing } = await supabase
@@ -72,13 +126,30 @@ router.post('/users', async (req: Request, res: Response): Promise<void> => {
     const onboardingToken = crypto.randomBytes(32).toString('hex');
     const onboardingTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+    // Compute UTC times — uses joiningDate as anchor (or today if not set)
+    const tz = timezone || 'UTC';
+    const anchor = joiningDate
+      ? new Date(joiningDate).toISOString().split('T')[0]   // "YYYY-MM-DD"
+      : new Date().toISOString().split('T')[0];
+    const startUtc = workStartTime ? localTimeToUtc(workStartTime, tz, anchor) : null;
+    const endUtc = workEndTime ? localTimeToUtc(workEndTime, tz, anchor) : null;
+
+
+    // Auto-compute displayName if not provided
+    const resolvedDisplayName = (displayName || '').trim() || `${firstName} ${lastName || ''}`.trim();
+
     const { data: created, error } = await supabase
       .from('User')
       .insert({
         id: crypto.randomUUID(),
         firstName,
         lastName: lastName || null,
+        displayName: resolvedDisplayName,
         email: email.toLowerCase(),
+        phoneNumber: phoneNumber || null,
+        joiningDate: joiningDate ? new Date(joiningDate).toISOString() : null,
+        workStartTimeUtc: startUtc,
+        workEndTimeUtc: endUtc,
         userCode,
         roleId: salesRole.id,
         onboardingToken,
