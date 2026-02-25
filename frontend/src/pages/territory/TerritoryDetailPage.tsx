@@ -3,6 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
 import {
+    HiArrowLeft, HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
+    HiUsers, HiCube, HiUserGroup, HiPresentationChartLine,
+    HiChartBar, HiExclamationCircle
+} from 'react-icons/hi';
+import {
     Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
     BarElement, Title, Tooltip, Legend,
 } from 'chart.js';
@@ -11,7 +16,7 @@ import { Line, Bar } from 'react-chartjs-2';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const fmt = (n: number) => `$${n.toLocaleString()}`;
+const fmt = (n: number) => `₹${n.toLocaleString()}`;
 
 interface MonthlyPoint { year: number; month: number; revenue: number; deals: number; }
 interface Product { id: string; name: string; category: string; revenue: number; }
@@ -31,7 +36,7 @@ const chartOpts: any = {
     plugins: { legend: { display: false }, tooltip: { bodyFont: { family: 'Inter' } } },
     scales: {
         x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 } } },
-        y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 }, callback: (v: any) => `$${Number(v).toLocaleString()}` } },
+        y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', font: { size: 11 }, callback: (v: any) => `₹${Number(v).toLocaleString()}` } },
     },
 };
 
@@ -65,10 +70,10 @@ export default function TerritoryDetailPage() {
     if (error || !data) return (
         <Layout title="Territory Details" subtitle="Error">
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
-                <span className="text-4xl">⛔</span>
+                <HiExclamationCircle className="text-5xl text-red-500/50" />
                 <p className="text-text-primary font-semibold">{error || 'Territory not found'}</p>
-                <button onClick={() => navigate('/territory-performance')} className="btn-secondary text-xs py-1.5">
-                    ← Back to Territories
+                <button onClick={() => navigate('/territory-performance')} className="btn-secondary text-xs py-1.5 flex items-center gap-2">
+                    <HiArrowLeft /> Back to Territories
                 </button>
             </div>
         </Layout>
@@ -88,24 +93,33 @@ export default function TerritoryDetailPage() {
 
             {/* Back button */}
             <button onClick={() => navigate('/territory-performance')}
-                className="btn-secondary text-xs py-1.5 mb-5 inline-flex items-center gap-1">
-                ← Back to Territories
+                className="btn-secondary text-xs py-1.5 mb-5 inline-flex items-center gap-2">
+                <HiArrowLeft /> Back to Territories
             </button>
 
             {/* KPI Row */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="stat-card">
-                    <span className="stat-card-label">Total Revenue</span>
+                    <div className="flex justify-between items-start mb-1">
+                        <span className="stat-card-label">Total Revenue</span>
+                        <HiCurrencyRupee className="text-lg text-amber-400" />
+                    </div>
                     <span className="stat-card-value text-accent">{totalRevenue > 0 ? fmt(totalRevenue) : '—'}</span>
                     <span className="stat-card-sub">Across all periods</span>
                 </div>
                 <div className="stat-card">
-                    <span className="stat-card-label">Total Deals</span>
+                    <div className="flex justify-between items-start mb-1">
+                        <span className="stat-card-label">Total Deals</span>
+                        <HiShoppingBag className="text-lg text-blue-400" />
+                    </div>
                     <span className="stat-card-value">{totalDeals || '—'}</span>
                     <span className="stat-card-sub">Closed deals</span>
                 </div>
                 <div className="stat-card">
-                    <span className="stat-card-label">Avg Deal Size</span>
+                    <div className="flex justify-between items-start mb-1">
+                        <span className="stat-card-label">Avg Deal Size</span>
+                        <HiTrendingUp className="text-lg text-green-400" />
+                    </div>
                     <span className="stat-card-value">{avgDealSize > 0 ? fmt(avgDealSize) : '—'}</span>
                     <span className="stat-card-sub">Revenue ÷ Deals</span>
                 </div>
@@ -115,7 +129,9 @@ export default function TerritoryDetailPage() {
 
                 {/* Monthly Revenue Trend */}
                 <div className="lg:col-span-2 card">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4">Monthly Revenue Trend</h3>
+                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
+                        <HiPresentationChartLine className="text-amber-400" /> Monthly Revenue Trend
+                    </h3>
                     {monthlyTrend.length > 0 ? (
                         <div style={{ height: 220 }}>
                             <Line
@@ -138,7 +154,9 @@ export default function TerritoryDetailPage() {
 
                 {/* Assigned Sales Reps */}
                 <div className="card flex flex-col">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4">Assigned Sales Reps</h3>
+                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
+                        <HiUsers className="text-blue-400" /> Assigned Sales Reps
+                    </h3>
                     {assignedReps.length > 0 ? (
                         <div className="flex flex-col gap-2">
                             {assignedReps.map(rep => (
@@ -163,7 +181,9 @@ export default function TerritoryDetailPage() {
                 {/* Deals Trend */}
                 {monthlyTrend.length > 0 && (
                     <div className="card">
-                        <h3 className="text-text-primary text-sm font-semibold mb-4">Monthly Deals Volume</h3>
+                        <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
+                            <HiChartBar className="text-blue-400" /> Monthly Deals Volume
+                        </h3>
                         <div style={{ height: 180 }}>
                             <Bar
                                 data={{
@@ -190,7 +210,9 @@ export default function TerritoryDetailPage() {
 
                 {/* Top Products */}
                 <div className="card">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4">Top Products</h3>
+                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
+                        <HiCube className="text-green-400" /> Top Products
+                    </h3>
                     {topProducts.length > 0 ? (
                         <div className="flex flex-col gap-2">
                             {topProducts.map((p, i) => (
@@ -211,7 +233,9 @@ export default function TerritoryDetailPage() {
 
                 {/* Top Customers */}
                 <div className="card">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4">Top Customers</h3>
+                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
+                        <HiUserGroup className="text-indigo-400" /> Top Customers
+                    </h3>
                     {topCustomers.length > 0 ? (
                         <div className="flex flex-col gap-2">
                             {topCustomers.map((c, i) => (

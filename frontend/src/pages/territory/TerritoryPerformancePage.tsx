@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import {
+    HiSearch, HiFilter, HiCalendar, HiX,
+    HiChevronDown, HiChevronUp, HiArrowRight,
+    HiSelector, HiSortAscending, HiSortDescending,
+    HiChartBar
+} from 'react-icons/hi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SalesRep { id: string; displayName: string; userCode: string; }
@@ -14,7 +20,7 @@ interface TerritoryRow {
 interface RepOption { id: string; displayName: string; userCode: string; }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const fmt = (n: number) => `$${n.toLocaleString()}`;
+const fmt = (n: number) => `₹${n.toLocaleString()}`;
 
 const RevBadge = ({ revenue, max }: { revenue: number; max: number }) => {
     const pct = max > 0 ? (revenue / max) * 100 : 0;
@@ -125,8 +131,8 @@ export default function TerritoryPerformancePage() {
 
     const SortIcon = ({ col }: { col: string }) =>
         sortCol === col
-            ? <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>
-            : <span className="ml-1 opacity-20">↕</span>;
+            ? <span className="ml-1">{sortDir === 'asc' ? <HiSortAscending className="inline" /> : <HiSortDescending className="inline" />}</span>
+            : <HiSelector className="ml-1 opacity-20 inline" />;
 
     const clearDates = () => { setFromDate(''); setToDate(''); setDateError(''); };
 
@@ -142,14 +148,18 @@ export default function TerritoryPerformancePage() {
 
                     {/* Search */}
                     <div className="flex flex-col gap-1 min-w-[200px]">
-                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest">Search</label>
+                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest flex items-center gap-1.5">
+                            <HiSearch className="text-[10px]" /> Search
+                        </label>
                         <input id="tp-search" value={search} onChange={e => setSearch(e.target.value)}
                             placeholder="Territory or state…" className="input text-xs py-1.5" />
                     </div>
 
                     {/* Region */}
                     <div className="flex flex-col gap-1">
-                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest">Region</label>
+                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest flex items-center gap-1.5">
+                            <HiFilter className="text-[10px]" /> Region
+                        </label>
                         <select value={regionFilter} onChange={e => setRegionFilter(e.target.value)}
                             className="input text-xs py-1.5 min-w-[140px]">
                             <option value="">All Regions</option>
@@ -174,12 +184,12 @@ export default function TerritoryPerformancePage() {
                                                 </span>
                                             </span>
                                             <button className="text-text-subtle hover:text-text-primary ml-1 flex-shrink-0"
-                                                onClick={e => { e.stopPropagation(); setRepFilter(''); setRepSearch(''); setRepDropOpen(false); }}>✕</button>
+                                                onClick={e => { e.stopPropagation(); setRepFilter(''); setRepSearch(''); setRepDropOpen(false); }}><HiX /></button>
                                         </>
                                     ) : (
                                         <span className="text-text-subtle flex-1">All Reps</span>
                                     )}
-                                    <span className="text-text-subtle ml-1 flex-shrink-0">{repDropOpen ? '▲' : '▼'}</span>
+                                    <span className="text-text-subtle ml-1 flex-shrink-0">{repDropOpen ? <HiChevronUp /> : <HiChevronDown />}</span>
                                 </div>
 
                                 {repDropOpen && (
@@ -236,7 +246,9 @@ export default function TerritoryPerformancePage() {
 
                     {/* From Date */}
                     <div className="flex flex-col gap-1">
-                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest">From Date</label>
+                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest flex items-center gap-1.5">
+                            <HiCalendar className="text-[10px]" /> From Date
+                        </label>
                         <input type="date" value={fromDate} max={toDate || undefined}
                             onChange={e => { setFromDate(e.target.value); setDateError(''); }}
                             className="input text-xs py-1.5 min-w-[140px]" />
@@ -244,7 +256,9 @@ export default function TerritoryPerformancePage() {
 
                     {/* To Date */}
                     <div className="flex flex-col gap-1">
-                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest">To Date</label>
+                        <label className="text-text-muted text-xs font-medium uppercase tracking-widest flex items-center gap-1.5">
+                            <HiCalendar className="text-[10px]" /> To Date
+                        </label>
                         <input type="date" value={toDate} min={fromDate || undefined}
                             onChange={e => { setToDate(e.target.value); setDateError(''); }}
                             className="input text-xs py-1.5 min-w-[140px]" />
@@ -252,8 +266,8 @@ export default function TerritoryPerformancePage() {
 
                     {/* Clear dates */}
                     {(fromDate || toDate) && (
-                        <button onClick={clearDates} className="btn-secondary text-xs py-1.5 self-end">
-                            ✕ Clear dates
+                        <button onClick={clearDates} className="btn-secondary text-xs py-1.5 self-end flex items-center gap-1.5">
+                            <HiX /> Clear dates
                         </button>
                     )}
 
@@ -301,7 +315,7 @@ export default function TerritoryPerformancePage() {
                 </div>
             ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-2 text-center">
-                    <span className="text-4xl">📊</span>
+                    <HiChartBar className="text-5xl text-text-muted opacity-20" />
                     <p className="text-text-muted text-sm">No territories found</p>
                     {!isMgmt && <p className="text-text-subtle text-xs">Ask your admin to assign territories to you.</p>}
                 </div>
@@ -373,8 +387,8 @@ export default function TerritoryPerformancePage() {
                                         <button
                                             id={`view-${row.territoryId}`}
                                             onClick={() => navigate(`/territory-performance/${row.territoryId}`)}
-                                            className="btn-secondary py-1 px-3 text-xs whitespace-nowrap">
-                                            View Details →
+                                            className="btn-secondary py-1 px-3 text-xs whitespace-nowrap flex items-center gap-1 group">
+                                            View Details <HiArrowRight className="group-hover:translate-x-1 transition-transform" />
                                         </button>
                                     </td>
                                 </tr>

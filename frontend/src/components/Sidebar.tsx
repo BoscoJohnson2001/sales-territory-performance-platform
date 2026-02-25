@@ -1,12 +1,14 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { HiOutlineMap, HiOutlineViewGrid, HiOutlineChartBar, HiLogout } from 'react-icons/hi';
+import { IconType } from 'react-icons';
 
-const NAV: { label: string; to: string; icon: string; roles: string[] }[] = [
-  { label: 'Map', to: '/map', icon: '🗺️', roles: ['ADMIN', 'MANAGEMENT', 'SALES'] },
-  { label: 'Dashboard', to: '/admin/dashboard', icon: '📊', roles: ['ADMIN'] },
-  { label: 'Dashboard', to: '/management/dashboard', icon: '📊', roles: ['MANAGEMENT'] },
-  { label: 'My Stats', to: '/sales/dashboard', icon: '📊', roles: ['SALES'] },
-  { label: 'Territory Performance', to: '/territory-performance', icon: '📍', roles: ['MANAGEMENT', 'SALES'] },
+const NAV: { label: string; to: string; icon: IconType; roles: string[] }[] = [
+  { label: 'Map', to: '/map', icon: HiOutlineMap, roles: ['ADMIN', 'MANAGEMENT', 'SALES'] },
+  { label: 'Dashboard', to: '/admin/dashboard', icon: HiOutlineViewGrid, roles: ['ADMIN'] },
+  { label: 'Dashboard', to: '/management/dashboard', icon: HiOutlineViewGrid, roles: ['MANAGEMENT'] },
+  { label: 'My Stats', to: '/sales/dashboard', icon: HiOutlineViewGrid, roles: ['SALES'] },
+  { label: 'Territory Performance', to: '/territory-performance', icon: HiOutlineChartBar, roles: ['MANAGEMENT', 'SALES'] },
 ];
 
 export default function Sidebar() {
@@ -30,7 +32,7 @@ export default function Sidebar() {
         {filtered.map((item) => (
           <NavLink key={item.to} to={item.to}
             className={({ isActive }) => isActive ? 'nav-item-active' : 'nav-item'}>
-            <span className="text-base">{item.icon}</span>
+            <item.icon className="text-lg" />
             <span>{item.label}</span>
           </NavLink>
         ))}
@@ -48,7 +50,8 @@ export default function Sidebar() {
           </div>
         </div>
         <button id="logout-btn" onClick={() => { logout(); navigate('/login'); }}
-          className="btn-secondary w-full justify-center text-xs py-1.5">
+          className="btn-secondary w-full justify-center text-xs py-1.5 flex items-center gap-2">
+          <HiLogout className="text-sm" />
           Sign Out
         </button>
       </div>

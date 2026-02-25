@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
+import {
+  HiUsers, HiCheckCircle, HiUserGroup, HiCollection,
+  HiPlus, HiX, HiExclamationCircle
+} from 'react-icons/hi';
 
 interface User {
   id: string; userCode: string; firstName: string; lastName: string;
@@ -29,6 +33,11 @@ export default function AdminDashboard() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [creating, setCreating] = useState(false);
   const [createMsg, setCreateMsg] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Product modal state
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [pCreateMsg, setPCreateMsg] = useState('');
 
   // Auto-detect browser timezone
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -103,6 +112,8 @@ export default function AdminDashboard() {
       setForm({ firstName: '', lastName: '', displayName: '', email: '', phoneNumber: '', joiningDate: '', workStartTime: '', workEndTime: '' });
       setFormErrors({});
       fetchData();
+      // Auto-close modal after 1.5s success
+      setTimeout(() => { setIsModalOpen(false); setCreateMsg(''); }, 1500);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
       setCreateMsg(`❌ ${msg || 'Failed to create user'}`);
@@ -115,9 +126,18 @@ export default function AdminDashboard() {
   };
 
   const createProduct = async () => {
-    setPCreating(true);
-    try { await client.post('/api/admin/products', { ...pForm, price: parseFloat(pForm.price) }); setPForm({ name: '', category: '', price: '' }); fetchData(); }
-    finally { setPCreating(false); }
+    setPCreating(true); setPCreateMsg('');
+    try {
+      await client.post('/api/admin/products', { ...pForm, price: parseFloat(pForm.price) });
+      setPCreateMsg('✅ Product added successfully.');
+      setPForm({ name: '', category: '', price: '' });
+      fetchData();
+      // Auto-close modal after 1.5s success
+      setTimeout(() => { setIsProductModalOpen(false); setPCreateMsg(''); }, 1500);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } }).response?.data?.message;
+      setPCreateMsg(`❌ ${msg || 'Failed to add product'}`);
+    } finally { setPCreating(false); }
   };
 
   const toggleTerritorySelection = (id: string) => {
@@ -165,13 +185,16 @@ export default function AdminDashboard() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Users', value: users.length, sub: 'All roles' },
-          { label: 'Active Users', value: totalActive, sub: 'Currently active' },
-          { label: 'Sales Reps', value: salesUsers.length, sub: 'SL_ accounts' },
-          { label: 'Products', value: products.length, sub: 'In catalogue' },
+          { label: 'Total Users', value: users.length, sub: 'All roles', icon: HiUsers, color: 'text-blue-400' },
+          { label: 'Active Users', value: totalActive, sub: 'Currently active', icon: HiCheckCircle, color: 'text-green-400' },
+          { label: 'Sales Reps', value: salesUsers.length, sub: 'SL_ accounts', icon: HiUserGroup, color: 'text-purple-400' },
+          { label: 'Products', value: products.length, sub: 'In catalogue', icon: HiCollection, color: 'text-amber-400' },
         ].map(c => (
           <div key={c.label} className="stat-card card-hover">
-            <span className="stat-card-label">{c.label}</span>
+            <div className="flex justify-between items-start mb-1">
+              <span className="stat-card-label">{c.label}</span>
+              <c.icon className={`text-lg ${c.color}`} />
+            </div>
             <span className="stat-card-value">{loading ? '—' : c.value}</span>
             <span className="stat-card-sub">{c.sub}</span>
           </div>
@@ -191,83 +214,24 @@ export default function AdminDashboard() {
 
       {/* Users Tab */}
       {tab === 'users' && (
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Create User */}
-          <div className="card">
-            <h3 className="text-text-primary font-semibold mb-4">Create Sales Rep</h3>
-            <div className="flex flex-col gap-3">
-
-              {/* Row 1: Names */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <input id="new-user-first" className={`input text-sm ${formErrors.firstName ? 'border-red-500' : ''}`}
-                    placeholder="First Name *" value={form.firstName}
-                    onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
-                  {formErrors.firstName && <p className="text-red-400 text-xs mt-0.5">{formErrors.firstName}</p>}
-                </div>
-                <input id="new-user-last" className="input text-sm" placeholder="Last Name"
-                  value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
-              </div>
-
-              {/* Display Name */}
-              <input id="new-user-display" className="input text-sm" placeholder="Display Name (auto if blank)"
-                value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} />
-
-              {/* Email */}
-              <div>
-                <input id="new-user-email" className={`input text-sm ${formErrors.email ? 'border-red-500' : ''}`}
-                  placeholder="Email *" type="email" value={form.email}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-                {formErrors.email && <p className="text-red-400 text-xs mt-0.5">{formErrors.email}</p>}
-              </div>
-
-              {/* Phone */}
-              <div>
-                <input id="new-user-phone" className={`input text-sm ${formErrors.phoneNumber ? 'border-red-500' : ''}`}
-                  placeholder="Phone with country code (e.g. +919876543210)"
-                  value={form.phoneNumber}
-                  onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))} />
-                {formErrors.phoneNumber
-                  ? <p className="text-red-400 text-xs mt-0.5">{formErrors.phoneNumber}</p>
-                  : <p className="text-text-subtle text-xs mt-0.5">Include country code e.g. +91…</p>}
-              </div>
-
-              {/* Joining Date */}
-              <div>
-                <label className="text-text-muted text-xs font-medium uppercase tracking-widest block mb-1">Joining Date</label>
-                <input id="new-user-joining" type="date" className={`input text-sm ${formErrors.joiningDate ? 'border-red-500' : ''}`}
-                  max={new Date().toISOString().split('T')[0]}
-                  value={form.joiningDate}
-                  onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))} />
-                {formErrors.joiningDate && <p className="text-red-400 text-xs mt-0.5">{formErrors.joiningDate}</p>}
-              </div>
-
-              {/* Working Hours */}
-              <div>
-                <label className="text-text-muted text-xs font-medium uppercase tracking-widest block mb-1">
-                  Working Hours <span className="text-text-subtle normal-case">({tz})</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <input id="new-user-start" type="time" className="input text-sm"
-                    value={form.workStartTime}
-                    onChange={e => setForm(f => ({ ...f, workStartTime: e.target.value }))} />
-                  <input id="new-user-end" type="time" className="input text-sm"
-                    value={form.workEndTime}
-                    onChange={e => setForm(f => ({ ...f, workEndTime: e.target.value }))} />
-                </div>
-                {formErrors.workTime && <p className="text-red-400 text-xs mt-0.5">{formErrors.workTime}</p>}
-              </div>
-
-              <button id="create-user-btn" onClick={createUser} disabled={creating} className="btn-primary justify-center">
-                {creating ? 'Creating...' : 'Create & Send Email'}
-              </button>
-              {createMsg && <p className="text-xs mt-1" style={{ color: createMsg.startsWith('✅') ? '#22c55e' : '#ef4444' }}>{createMsg}</p>}
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center mb-2">
+            <div>
+              <h2 className="text-text-primary text-lg font-bold">User Management</h2>
+              <p className="text-text-muted text-xs">Manage sales representatives and system access.</p>
             </div>
+            <button
+              id="open-create-user-modal"
+              onClick={() => setIsModalOpen(true)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <HiPlus /> New User
+            </button>
           </div>
 
           {/* Users Table */}
-          <div className="md:col-span-2 card">
-            <h3 className="text-text-primary font-semibold mb-4">All Users</h3>
+          <div className="card w-full animate-fade-in">
+            <h3 className="text-text-primary font-semibold mb-4 text-sm uppercase tracking-wider opacity-80">All Registered Users</h3>
             <div className="table-wrapper">
               <table className="table">
                 <thead><tr>
@@ -316,20 +280,24 @@ export default function AdminDashboard() {
 
       {/* Products Tab */}
       {tab === 'products' && (
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="card">
-            <h3 className="text-text-primary font-semibold mb-4">Add Product</h3>
-            <div className="flex flex-col gap-3">
-              <input id="prod-name" className="input" placeholder="Product Name" value={pForm.name} onChange={e => setPForm(f => ({ ...f, name: e.target.value }))} />
-              <input id="prod-category" className="input" placeholder="Category" value={pForm.category} onChange={e => setPForm(f => ({ ...f, category: e.target.value }))} />
-              <input id="prod-price" className="input" placeholder="Price" type="number" value={pForm.price} onChange={e => setPForm(f => ({ ...f, price: e.target.value }))} />
-              <button id="create-product-btn" onClick={createProduct} disabled={pCreating} className="btn-primary justify-center">
-                {pCreating ? 'Adding...' : 'Add Product'}
-              </button>
+        <div className="flex flex-col gap-4">
+          <div className="flex justify-between items-center mb-2">
+            <div>
+              <h2 className="text-text-primary text-lg font-bold">Product Catalogue</h2>
+              <p className="text-text-muted text-xs">Manage medical products and pricing.</p>
             </div>
+            <button
+              id="open-create-product-modal"
+              onClick={() => setIsProductModalOpen(true)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <HiPlus /> New Product
+            </button>
           </div>
-          <div className="md:col-span-2 card">
-            <h3 className="text-text-primary font-semibold mb-4">Product Catalogue</h3>
+
+          {/* Product Catalogue Table */}
+          <div className="card w-full animate-fade-in">
+            <h3 className="text-text-primary font-semibold mb-4 text-sm uppercase tracking-wider opacity-80">All Products</h3>
             <div className="table-wrapper">
               <table className="table">
                 <thead><tr><th className="th">Name</th><th className="th">Category</th><th className="th">Price</th></tr></thead>
@@ -338,7 +306,7 @@ export default function AdminDashboard() {
                     <tr key={p.id} className="tr-hover">
                       <td className="td">{p.name}</td>
                       <td className="td"><span className="badge-info">{p.category}</span></td>
-                      <td className="td text-accent font-semibold">${parseFloat(p.price).toLocaleString()}</td>
+                      <td className="td text-accent font-semibold">₹{parseFloat(p.price).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -446,6 +414,221 @@ export default function AdminDashboard() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Side Modal for Creating User */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end animate-fade-in">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsModalOpen(false)}
+          />
+
+          {/* Panel */}
+          <div className="relative w-full max-w-md bg-bg-surface border-l border-bg-border shadow-2xl flex flex-col h-full animate-slide-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-bg-border bg-bg-base/30">
+              <div>
+                <h3 className="text-text-primary font-bold text-lg">Create Sales Rep</h3>
+                <p className="text-text-subtle text-xs">Register a new representative in the system.</p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-text-muted hover:text-text-primary p-2 rounded-lg hover:bg-bg-hover transition-colors"
+                aria-label="Close"
+              >
+                <HiX className="text-xl" />
+              </button>
+            </div>
+
+            {/* Form Content */}
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+              <div className="flex flex-col gap-4">
+                {/* Row 1: Names */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="stat-card-label" htmlFor="new-user-first">First Name *</label>
+                    <input id="new-user-first" className={`input ${formErrors.firstName ? 'border-red-500' : ''}`}
+                      placeholder="Jane" value={form.firstName}
+                      onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} />
+                    {formErrors.firstName && <p className="text-red-400 text-[10px] mt-0.5">{formErrors.firstName}</p>}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="stat-card-label" htmlFor="new-user-last">Last Name</label>
+                    <input id="new-user-last" className="input" placeholder="Doe"
+                      value={form.lastName} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} />
+                  </div>
+                </div>
+
+                {/* Display Name */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="new-user-display">Display Name</label>
+                  <input id="new-user-display" className="input" placeholder="e.g. Jane D."
+                    value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} />
+                  <p className="text-text-subtle text-[10px]">Leave blank to auto-generate from names.</p>
+                </div>
+
+                {/* Email */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="new-user-email">Email Address *</label>
+                  <input id="new-user-email" className={`input ${formErrors.email ? 'border-red-500' : ''}`}
+                    placeholder="jane.doe@pfizer.com" type="email" value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                  {formErrors.email && <p className="text-red-400 text-[10px] mt-0.5">{formErrors.email}</p>}
+                </div>
+
+                {/* Phone */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="new-user-phone">Phone Number</label>
+                  <input id="new-user-phone" className={`input ${formErrors.phoneNumber ? 'border-red-500' : ''}`}
+                    placeholder="+919876543210"
+                    value={form.phoneNumber}
+                    onChange={e => setForm(f => ({ ...f, phoneNumber: e.target.value }))} />
+                  {formErrors.phoneNumber
+                    ? <p className="text-red-400 text-[10px] mt-0.5">{formErrors.phoneNumber}</p>
+                    : <p className="text-text-subtle text-[10px]">Include country code e.g. +91…</p>}
+                </div>
+
+                {/* Joining Date */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="new-user-joining"> joining date</label>
+                  <input id="new-user-joining" type="date" className={`input ${formErrors.joiningDate ? 'border-red-500' : ''}`}
+                    max={new Date().toISOString().split('T')[0]}
+                    value={form.joiningDate}
+                    onChange={e => setForm(f => ({ ...f, joiningDate: e.target.value }))} />
+                  {formErrors.joiningDate && <p className="text-red-400 text-[10px] mt-0.5">{formErrors.joiningDate}</p>}
+                </div>
+
+                {/* Working Hours */}
+                <div className="flex flex-col gap-1.5 p-4 rounded-xl bg-bg-base/50 border border-bg-border/50">
+                  <label className="stat-card-label flex items-center justify-between">
+                    Working Hours <span className="normal-case opacity-60">({tz})</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3 mt-1">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-text-subtle uppercase">Start</span>
+                      <input id="new-user-start" type="time" className="input text-xs h-9 px-3"
+                        value={form.workStartTime}
+                        onChange={e => setForm(f => ({ ...f, workStartTime: e.target.value }))} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-text-subtle uppercase">End</span>
+                      <input id="new-user-end" type="time" className="input text-xs h-9 px-3"
+                        value={form.workEndTime}
+                        onChange={e => setForm(f => ({ ...f, workEndTime: e.target.value }))} />
+                    </div>
+                  </div>
+                  {formErrors.workTime && <p className="text-red-400 text-[10px] mt-1">{formErrors.workTime}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-bg-border bg-bg-base/30 flex flex-col gap-3">
+              <button
+                id="create-user-btn"
+                onClick={createUser}
+                disabled={creating}
+                className="btn-primary w-full justify-center py-3 text-base shadow-lg shadow-accent/10"
+              >
+                {creating ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    Processing...
+                  </span>
+                ) : 'Create & Send Onboarding Email'}
+              </button>
+              {createMsg && (
+                <div className={`p-3 rounded-lg text-xs font-medium animate-fade-in flex items-center gap-2 ${createMsg.startsWith('✅') ? 'bg-status-high/10 text-status-high border border-status-high/20' : 'bg-status-low/10 text-status-low border border-status-low/20'}`}>
+                  {createMsg.startsWith('✅') ? <HiCheckCircle className="text-base flex-shrink-0" /> : <HiExclamationCircle className="text-base flex-shrink-0" />}
+                  {createMsg}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Side Modal for Creating Product */}
+      {isProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end animate-fade-in">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsProductModalOpen(false)}
+          />
+
+          {/* Panel */}
+          <div className="relative w-full max-w-md bg-bg-surface border-l border-bg-border shadow-2xl flex flex-col h-full animate-slide-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-bg-border bg-bg-base/30">
+              <div>
+                <h3 className="text-text-primary font-bold text-lg">Add New Product</h3>
+                <p className="text-text-subtle text-xs">Define a new medical product in the catalogue.</p>
+              </div>
+              <button
+                onClick={() => setIsProductModalOpen(false)}
+                className="text-text-muted hover:text-text-primary p-2 rounded-lg hover:bg-bg-hover transition-colors"
+                aria-label="Close"
+              >
+                <HiX className="text-xl" />
+              </button>
+            </div>
+
+            {/* Form Content */}
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
+              <div className="flex flex-col gap-4">
+                {/* Product Name */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="prod-name">Product Name *</label>
+                  <input id="prod-name" className="input" placeholder="e.g. Lipitor 20mg"
+                    value={pForm.name} onChange={e => setPForm(f => ({ ...f, name: e.target.value }))} />
+                </div>
+
+                {/* Category */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="prod-category">Category *</label>
+                  <input id="prod-category" className="input" placeholder="e.g. Cardiovascular"
+                    value={pForm.category} onChange={e => setPForm(f => ({ ...f, category: e.target.value }))} />
+                </div>
+
+                {/* Price */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="stat-card-label" htmlFor="prod-price">Unit Price (₹) *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-subtle">₹</span>
+                    <input id="prod-price" className="input pl-8" placeholder="0.00" type="number"
+                      value={pForm.price} onChange={e => setPForm(f => ({ ...f, price: e.target.value }))} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-bg-border bg-bg-base/30 flex flex-col gap-3">
+              <button
+                id="create-product-btn"
+                onClick={createProduct}
+                disabled={pCreating}
+                className="btn-primary w-full justify-center py-3 text-base shadow-lg shadow-accent/10"
+              >
+                {pCreating ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    Adding...
+                  </span>
+                ) : 'Add Product to Catalogue'}
+              </button>
+              {pCreateMsg && (
+                <div className={`p-3 rounded-lg text-xs font-medium animate-fade-in flex items-center gap-2 ${pCreateMsg.startsWith('✅') ? 'bg-status-high/10 text-status-high border border-status-high/20' : 'bg-status-low/10 text-status-low border border-status-low/20'}`}>
+                  {pCreateMsg.startsWith('✅') ? <HiCheckCircle className="text-base flex-shrink-0" /> : <HiExclamationCircle className="text-base flex-shrink-0" />}
+                  {pCreateMsg}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

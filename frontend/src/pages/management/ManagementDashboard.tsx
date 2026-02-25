@@ -3,6 +3,13 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
+import {
+  HiCurrencyRupee, HiShoppingBag,
+  HiLocationMarker, HiMap,
+  HiTrendingUp, HiTrendingDown,
+  HiLightningBolt, HiLightBulb, HiSun,
+  HiPresentationChartLine, HiChartPie
+} from 'react-icons/hi';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
 
@@ -38,13 +45,16 @@ export default function ManagementDashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Revenue', value: loading ? '—' : `$${Number(data?.totalRevenue || 0).toLocaleString()}`, sub: 'All territories' },
-          { label: 'Total Deals', value: loading ? '—' : data?.totalDeals ?? 0, sub: 'Closed deals' },
-          { label: 'Top Region', value: loading ? '—' : Object.entries(data?.revenueByRegion || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '—', sub: 'By revenue' },
-          { label: 'Territories', value: loading ? '—' : (data?.top5Territories.length ?? 0) + (data?.bottom5Territories.length ?? 0), sub: 'With sales data' },
+          { label: 'Total Revenue', value: loading ? '—' : `₹${Number(data?.totalRevenue || 0).toLocaleString()}`, sub: 'All territories', icon: HiCurrencyRupee, color: 'text-amber-400' },
+          { label: 'Total Deals', value: loading ? '—' : data?.totalDeals ?? 0, sub: 'Closed deals', icon: HiShoppingBag, color: 'text-blue-400' },
+          { label: 'Top Region', value: loading ? '—' : Object.entries(data?.revenueByRegion || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '—', sub: 'By revenue', icon: HiLocationMarker, color: 'text-green-400' },
+          { label: 'Territories', value: loading ? '—' : (data?.top5Territories.length ?? 0) + (data?.bottom5Territories.length ?? 0), sub: 'With sales data', icon: HiMap, color: 'text-indigo-400' },
         ].map(c => (
           <div key={c.label} className="stat-card card-hover">
-            <span className="stat-card-label">{c.label}</span>
+            <div className="flex justify-between items-start mb-1">
+              <span className="stat-card-label">{c.label}</span>
+              <c.icon className={`text-lg ${c.color}`} />
+            </div>
             <span className="stat-card-value text-xl">{c.value}</span>
             <span className="stat-card-sub">{c.sub}</span>
           </div>
@@ -54,7 +64,9 @@ export default function ManagementDashboard() {
       <div className="grid md:grid-cols-2 gap-6 mb-6">
         {/* Monthly Revenue Trend */}
         <div className="card">
-          <h3 className="text-text-primary font-semibold mb-4">Monthly Revenue Trend</h3>
+          <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
+            <HiPresentationChartLine className="text-amber-400" /> Monthly Revenue Trend
+          </h3>
           <div className="h-48">
             {loading ? <div className="flex items-center justify-center h-full text-text-muted text-sm">Loading...</div> : (
               <Line data={{
@@ -67,7 +79,9 @@ export default function ManagementDashboard() {
 
         {/* Revenue by Region */}
         <div className="card">
-          <h3 className="text-text-primary font-semibold mb-4">Revenue by Region</h3>
+          <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
+            <HiChartPie className="text-blue-400" /> Revenue by Region
+          </h3>
           <div className="h-48">
             {loading ? <div className="flex items-center justify-center h-full text-text-muted text-sm">Loading...</div> : (
               <Doughnut data={{
@@ -82,7 +96,9 @@ export default function ManagementDashboard() {
       <div className="grid md:grid-cols-2 gap-6">
         {/* Top 5 Territories */}
         <div className="card">
-          <h3 className="text-text-primary font-semibold mb-4">🌟 Top 5 Territories</h3>
+          <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
+            <HiTrendingUp className="text-green-400" /> Top 5 Territories
+          </h3>
           <div className="table-wrapper">
             <table className="table">
               <thead><tr><th className="th">Territory</th><th className="th">Revenue</th><th className="th">Deals</th><th className="th">Signal</th></tr></thead>
@@ -90,12 +106,12 @@ export default function ManagementDashboard() {
                 {(data?.top5Territories || []).map(t => (
                   <tr key={t.territoryId} className="tr-hover">
                     <td className="td">{t.name}</td>
-                    <td className="td text-accent font-semibold">${t.revenue.toLocaleString()}</td>
+                    <td className="td text-accent font-semibold">₹{t.revenue.toLocaleString()}</td>
                     <td className="td">{t.deals}</td>
                     <td className="td">
-                      {t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high" title="🚀 Expansion Candidate — Revenue ≥ $50K. Strong performer, ready for growth investment.">🚀 Expand</span>
-                        : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium" title="💡 Pricing Opportunity — Active sales but revenue < $50K. Review deal pricing or upsell strategies.">💡 Pricing</span>
-                          : t.insight === 'NO_ACTIVITY' ? <span className="badge-low" title="❄️ Cold — No revenue or deals recorded. Needs immediate attention to activate this territory.">❄️ Cold</span>
+                      {t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high flex items-center gap-1" title="Expansion Candidate — Revenue ≥ ₹50K. Strong performer, ready for growth investment."><HiLightningBolt className="text-[10px]" /> Expand</span>
+                        : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium flex items-center gap-1" title="Pricing Opportunity — Active sales but revenue < ₹50K. Review deal pricing or upsell strategies."><HiLightBulb className="text-[10px]" /> Pricing</span>
+                          : t.insight === 'NO_ACTIVITY' ? <span className="badge-low flex items-center gap-1" title="Cold — No revenue or deals recorded. Needs immediate attention to activate this territory."><HiSun className="text-[10px]" /> Cold</span>
                             : <span className="text-text-subtle text-xs">—</span>}
                     </td>
                   </tr>
@@ -107,7 +123,9 @@ export default function ManagementDashboard() {
 
         {/* Bottom 5 Territories */}
         <div className="card">
-          <h3 className="text-text-primary font-semibold mb-4">📉 Bottom 5 Territories</h3>
+          <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
+            <HiTrendingDown className="text-red-400" /> Bottom 5 Territories
+          </h3>
           <div className="table-wrapper">
             <table className="table">
               <thead><tr><th className="th">Territory</th><th className="th">Revenue</th><th className="th">Deals</th><th className="th">Signal</th></tr></thead>
@@ -115,12 +133,12 @@ export default function ManagementDashboard() {
                 {(data?.bottom5Territories || []).map(t => (
                   <tr key={t.territoryId} className="tr-hover">
                     <td className="td">{t.name}</td>
-                    <td className="td text-status-low font-semibold">${t.revenue.toLocaleString()}</td>
+                    <td className="td text-status-low font-semibold">₹{t.revenue.toLocaleString()}</td>
                     <td className="td">{t.deals}</td>
                     <td className="td">
-                      {t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high" title="🚀 Expansion Candidate — Revenue ≥ $50K. Strong performer, ready for growth investment.">🚀 Expand</span>
-                        : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium" title="💡 Pricing Opportunity — Active sales but revenue < $50K. Review deal pricing or upsell strategies.">💡 Pricing</span>
-                          : t.insight === 'NO_ACTIVITY' ? <span className="badge-low" title="❄️ Cold — No revenue or deals recorded. Needs immediate attention to activate this territory.">❄️ Cold</span>
+                      {t.insight === 'EXPANSION_CANDIDATE' ? <span className="badge-high flex items-center gap-1" title="Expansion Candidate — Revenue ≥ ₹50K. Strong performer, ready for growth investment."><HiLightningBolt className="text-[10px]" /> Expand</span>
+                        : t.insight === 'PRICING_OPPORTUNITY' ? <span className="badge-medium flex items-center gap-1" title="Pricing Opportunity — Active sales but revenue < ₹50K. Review deal pricing or upsell strategies."><HiLightBulb className="text-[10px]" /> Pricing</span>
+                          : t.insight === 'NO_ACTIVITY' ? <span className="badge-low flex items-center gap-1" title="Cold — No revenue or deals recorded. Needs immediate attention to activate this territory."><HiSun className="text-[10px]" /> Cold</span>
                             : <span className="text-text-subtle text-xs">—</span>}
                     </td>
                   </tr>

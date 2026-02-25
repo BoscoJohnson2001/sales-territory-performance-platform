@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
 import { getCurrentLocation, reverseGeocode } from '../../services/geolocation.service';
+import { useAuth } from '../../context/AuthContext';
+import {
+  HiOutlineFire, HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
+  HiLocationMarker, HiSearch, HiShieldCheck, HiQuestionMarkCircle,
+  HiLockClosed, HiExclamationCircle, HiCalendar, HiX, HiArrowRight
+} from 'react-icons/hi';
+import { IconType } from 'react-icons';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TerritoryData {
@@ -62,6 +69,7 @@ function pointInGeoJSONFeature(lat: number, lng: number, geometry: any): boolean
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function MapPage() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -76,6 +84,11 @@ export default function MapPage() {
   const activeTooltipLayerRef = useRef<any>(null); // layer whose tooltip is currently open
 
   const [heatmap, setHeatmap] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
   const [mapReady, setMapReady] = useState(false);
   const [apiReady, setApiReady] = useState(false);
   const [geoLoading, setGeoLoading] = useState(true);
@@ -117,7 +130,13 @@ export default function MapPage() {
 
   // ── Step 1: Revenue data ────────────────────────────────────────────────────
   useEffect(() => {
-    client.get('/api/map/districts').then(r => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+
+    setApiReady(false); // Trigger loading state
+    client.get(`/api/map/districts?startDate=${startDate}&endDate=${endDate}`).then(r => {
       const map = new Map<string, TerritoryData>();
       (r.data.territories as TerritoryData[]).forEach(t => map.set(t.name.toLowerCase(), t));
       tmapRef.current = map;
@@ -125,7 +144,7 @@ export default function MapPage() {
       if (!r.data.allowedAll) allowedRef.current = new Set(Array.from(map.keys()));
       setApiReady(true);
     }).catch(() => setApiReady(true));
-  }, []);
+  }, [selectedMonth]);
 
   // ── Step 2: Init Leaflet map ────────────────────────────────────────────────
   useEffect(() => {
@@ -217,7 +236,7 @@ export default function MapPage() {
         mk.bindTooltip(
           `<div style="font-weight:700;font-size:13px">${t.name}</div>` +
           `<div style="font-size:11px;opacity:.7">${t.state}</div>` +
-          `<div style="margin-top:4px">Revenue: <b>$${t.revenue.toLocaleString()}</b></div>` +
+          `<div style="margin-top:4px">Revenue: <b>₹{t.revenue.toLocaleString()}</b></div>` +
           `<div>Deals: ${t.deals}</div>`,
           { className: 'map-tooltip', direction: 'auto' }
         );
@@ -242,7 +261,7 @@ export default function MapPage() {
             `<div style="font-weight:700;font-size:13px">${dispName}</div>` +
             `<div style="font-size:11px;opacity:.7">${stateName}</div>` +
             (data
-              ? `<div style="margin-top:4px">Revenue: <b>$${data.revenue.toLocaleString()}</b></div><div>Deals: ${data.deals}</div>`
+              ? `<div style="margin-top:4px">Revenue: <b>₹${data.revenue.toLocaleString()}</b></div><div>Deals: ${data.deals}</div>`
               : `<div style="opacity:.5;margin-top:4px">No sales data</div>`),
             { className: 'map-tooltip', sticky: false, direction: 'auto' }
           );
@@ -412,20 +431,21 @@ export default function MapPage() {
     if (geoStatus === 'idle' || geoStatus === 'matched') return null;
     const map: Record<GeoStatus, { icon: string; text: string; color: string }> = {
       idle: { icon: '', text: '', color: '' },
-      detecting: { icon: '📡', text: 'Detecting your location…', color: '#60a5fa' },
-      geocoding: { icon: '🔍', text: 'Identifying district…', color: '#a78bfa' },
+      detecting: { icon: HiSearch, text: 'Detecting your location…', color: '#60a5fa' },
+      geocoding: { icon: HiLocationMarker, text: 'Identifying district…', color: '#a78bfa' },
       matched: { icon: '', text: '', color: '' },
-      unassigned: { icon: '🚫', text: 'District not assigned', color: '#ef4444' },
-      no_match: { icon: '❓', text: 'District not in data', color: '#f59e0b' },
-      denied: { icon: '🔒', text: 'Location denied', color: '#6b7280' },
-      error: { icon: '⚠️', text: 'Location unavailable', color: '#f59e0b' },
+      unassigned: { icon: HiShieldCheck, text: 'District not assigned', color: '#ef4444' },
+      no_match: { icon: HiQuestionMarkCircle, text: 'District not in data', color: '#f59e0b' },
+      denied: { icon: HiLockClosed, text: 'Location denied', color: '#6b7280' },
+      error: { icon: HiExclamationCircle, text: 'Location unavailable', color: '#f59e0b' },
     };
     const info = map[geoStatus];
     if (!info.text) return null;
+    const Icon = info.icon as any;
     return (
       <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full animate-pulse"
         style={{ backgroundColor: info.color + '22', color: info.color, border: `1px solid ${info.color}44` }}>
-        {info.icon} {info.text}
+        <Icon className="text-sm" /> {info.text}
       </span>
     );
   };
@@ -443,7 +463,8 @@ export default function MapPage() {
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-bg-card border border-bg-border shadow-sm transition-all hover:bg-bg-hover">
-          <span className="text-xs font-semibold text-text-muted select-none">🌡️ Heatmap</span>
+          <HiOutlineFire className={`text-xs ${heatmap ? 'text-amber-400' : 'text-text-muted'}`} />
+          <span className="text-xs font-semibold text-text-muted select-none">Heatmap</span>
           <button
             id="toggle-heatmap"
             type="button"
@@ -479,7 +500,7 @@ export default function MapPage() {
         {myDistrict && geoStatus === 'matched' && (
           <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
             style={{ backgroundColor: '#60a5fa22', color: '#60a5fa', border: '1px solid #60a5fa44' }}>
-            📍 Viewing your district: <b className="ml-1">{myDistrict}</b>
+            <HiLocationMarker /> Viewing your district: <b className="ml-1">{myDistrict}</b>
           </span>
         )}
 
@@ -488,6 +509,17 @@ export default function MapPage() {
             ? '⏳ Loading GeoJSON…'
             : `${stats.withData} / ${stats.total} districts with revenue data`}
         </span>
+
+        {/* Month Selector */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-card border border-bg-border shadow-sm transition-all hover:bg-bg-hover">
+          <HiCalendar className="text-text-muted" />
+          <input
+            type="month"
+            className="bg-transparent border-none text-xs font-semibold text-text-primary focus:outline-none cursor-pointer"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          />
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4" style={{ height: 'calc(100vh - 230px)' }}>
@@ -524,29 +556,40 @@ export default function MapPage() {
                     {myDistrict === selected.displayName && (
                       <span className="inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full"
                         style={{ backgroundColor: '#60a5fa22', color: '#60a5fa', border: '1px solid #60a5fa44' }}>
-                        📍 Your current district
+                        <HiLocationMarker className="text-[10px]" /> Your current district
                       </span>
                     )}
                   </div>
                   <button onClick={() => setSelected(null)}
-                    className="text-text-muted hover:text-text-primary text-xl leading-none">&times;</button>
+                    className="text-text-muted hover:text-text-primary">
+                    <HiX className="text-xl" />
+                  </button>
                 </div>
 
                 <div className="flex flex-col gap-3">
                   <div className="stat-card">
-                    <span className="stat-card-label">Total Revenue</span>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="stat-card-label">Total Revenue</span>
+                      <HiCurrencyRupee className="text-lg text-amber-400" />
+                    </div>
                     <span className="stat-card-value text-xl text-accent">
-                      {selected.revenue > 0 ? `$${selected.revenue.toLocaleString()}` : '—'}
+                      {selected.revenue > 0 ? `₹${selected.revenue.toLocaleString()}` : '—'}
                     </span>
                   </div>
                   <div className="stat-card">
-                    <span className="stat-card-label">Total Deals</span>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="stat-card-label">Total Deals</span>
+                      <HiShoppingBag className="text-lg text-blue-400" />
+                    </div>
                     <span className="stat-card-value text-xl">{selected.deals || '—'}</span>
                   </div>
                   <div className="stat-card">
-                    <span className="stat-card-label">Avg Deal Value</span>
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="stat-card-label">Avg Deal Value</span>
+                      <HiTrendingUp className="text-lg text-green-400" />
+                    </div>
                     <span className="stat-card-value text-xl">
-                      {selected.deals > 0 ? `$${selected.avgDeal.toLocaleString()}` : '—'}
+                      {selected.deals > 0 ? `₹${selected.avgDeal.toLocaleString()}` : '—'}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -566,20 +609,22 @@ export default function MapPage() {
                   )}
                 </div>
 
-                <div className="mt-auto pt-4 border-t border-bg-border">
-                  <button
-                    id="view-territory-detail"
-                    onClick={() => navigate(`/territory-performance/${selected.id}`)}
-                    className="btn-primary w-full justify-center group"
-                  >
-                    View Performance Details
-                    <span className="group-hover:translate-x-1 transition-transform">→</span>
-                  </button>
-                </div>
+                {user?.role !== 'ADMIN' && (
+                  <div className="mt-auto pt-4 border-t border-bg-border">
+                    <button
+                      id="view-territory-detail"
+                      onClick={() => navigate(`/territory-performance/${selected.id}`)}
+                      className="btn-primary w-full justify-center group flex items-center gap-2"
+                    >
+                      View Performance Details
+                      <HiArrowRight className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-2">
-                <span className="text-5xl">🗺️</span>
+                <HiOutlineMap className="text-5xl text-text-muted opacity-20" />
                 <p className="text-text-muted text-sm font-medium">
                   {geoStatus === 'detecting' || geoStatus === 'geocoding'
                     ? 'Finding your district…'

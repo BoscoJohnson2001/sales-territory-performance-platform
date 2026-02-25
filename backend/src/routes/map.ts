@@ -112,8 +112,11 @@ router.get('/districts', async (req: Request, res: Response): Promise<void> => {
     const { data: territories } = await tq;
 
     // Fetch all relevant sales
+    const { startDate, endDate } = req.query;
     let sq: any = supabase.from('Sale').select('territoryId, revenue, deals');
     if (allowedIds) sq = sq.in('territoryId', allowedIds);
+    if (startDate) sq = sq.gte('saleDate', startDate as string);
+    if (endDate) sq = sq.lte('saleDate', endDate as string);
     const { data: salesData } = await sq;
 
     // Aggregate per territory

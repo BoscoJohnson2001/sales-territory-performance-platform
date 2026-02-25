@@ -3,6 +3,11 @@ import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
+import {
+  HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
+  HiPlus, HiSave, HiX, HiCheckCircle, HiExclamationCircle,
+  HiChevronLeft, HiChevronRight
+} from 'react-icons/hi';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -86,17 +91,17 @@ function SaleRecordModal({ products, territories, onClose, onSuccess }: SaleModa
             <p className="text-text-subtle text-xs mt-0.5">Fill in the details to log a new sale</p>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors text-lg leading-none">
-            ×
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors">
+            <HiX className="text-xl" />
           </button>
         </div>
 
         {/* Form */}
         <form onSubmit={submit} className="px-6 py-5">
           {error && (
-            <div className="mb-4 px-4 py-2.5 rounded-lg text-sm text-red-400 border border-red-500/30"
+            <div className="mb-4 px-4 py-2.5 rounded-lg text-sm text-red-400 border border-red-500/30 flex items-center gap-2"
               style={{ background: 'rgba(239,68,68,0.08)' }}>
-              ❌ {error}
+              <HiExclamationCircle className="text-lg flex-shrink-0" /> {error}
             </div>
           )}
 
@@ -121,7 +126,7 @@ function SaleRecordModal({ products, territories, onClose, onSuccess }: SaleModa
 
             {/* Revenue */}
             <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Revenue ($)</label>
+              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Revenue (₹)</label>
               <input id="modal-revenue" className="input" placeholder="0.00" type="number" step="0.01" min="0"
                 value={form.revenue} onChange={f('revenue')} required />
             </div>
@@ -183,13 +188,18 @@ function SaleRecordModal({ products, territories, onClose, onSuccess }: SaleModa
             <button type="button" onClick={onClose} className="btn-secondary py-2 text-sm">
               Cancel
             </button>
-            <button id="modal-submit" type="submit" disabled={submitting} className="btn-primary py-2 text-sm">
+            <button id="modal-submit" type="submit" disabled={submitting} className="btn-primary py-2 text-sm flex items-center gap-2">
               {submitting ? (
                 <span className="flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-black/40 border-t-black rounded-full animate-spin" />
                   Saving…
                 </span>
-              ) : '💾 Save Sale'}
+              ) : (
+                <>
+                  <HiSave className="text-base" />
+                  Save Sale
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -216,8 +226,8 @@ function Pagination({ page, totalPages, total, onPage }: PaginationProps) {
       <span className="text-text-subtle text-xs">{total} record{total !== 1 ? 's' : ''}</span>
       <div className="flex items-center gap-1">
         <button onClick={() => onPage(page - 1)} disabled={page === 1}
-          className="px-2.5 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-          ← Prev
+          className="px-2.5 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+          <HiChevronLeft /> Prev
         </button>
         {pages.map(p => (
           <button key={p} onClick={() => onPage(p)}
@@ -228,8 +238,8 @@ function Pagination({ page, totalPages, total, onPage }: PaginationProps) {
           </button>
         ))}
         <button onClick={() => onPage(page + 1)} disabled={page === totalPages}
-          className="px-2.5 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
-          Next →
+          className="px-2.5 py-1 rounded text-xs text-text-muted hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1">
+          Next <HiChevronRight />
         </button>
       </div>
     </div>
@@ -299,9 +309,10 @@ export default function SalesDashboard() {
     <Layout title="My Dashboard" subtitle="Personal Sales Performance & Records">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-[9999] max-w-xs px-4 py-3 rounded-xl text-sm text-white shadow-2xl border border-white/10"
+        <div className="fixed top-4 right-4 z-[9999] max-w-xs px-4 py-3 rounded-xl text-sm text-white shadow-2xl border border-white/10 flex items-center gap-3"
           style={{ background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(8px)' }}>
-          {toast}
+          {toast.startsWith('✅') ? <HiCheckCircle className="text-green-400 text-lg flex-shrink-0" /> : <HiExclamationCircle className="text-red-400 text-lg flex-shrink-0" />}
+          <span>{toast.replace(/^[✅❌]/, '').trim()}</span>
         </div>
       )}
 
@@ -321,12 +332,15 @@ export default function SalesDashboard() {
         {/* KPI Cards — fixed height */}
         <div className="grid grid-cols-3 gap-4 flex-shrink-0 p-1 -m-1">
           {[
-            { label: 'My Revenue', value: loading ? '—' : `$${Number(dash?.totalRevenue || 0).toLocaleString()}` },
-            { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0 },
-            { label: 'Avg Deal Size', value: loading ? '—' : `$${Number(dash?.averageDealSize || 0).toFixed(0)}` },
+            { label: 'My Revenue', value: loading ? '—' : `₹${Number(dash?.totalRevenue || 0).toLocaleString()}`, icon: HiCurrencyRupee, color: 'text-amber-400' },
+            { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0, icon: HiShoppingBag, color: 'text-blue-400' },
+            { label: 'Avg Deal Size', value: loading ? '—' : `₹${Number(dash?.averageDealSize || 0).toFixed(0)}`, icon: HiTrendingUp, color: 'text-green-400' },
           ].map(c => (
             <div key={c.label} className="stat-card card-hover">
-              <span className="stat-card-label">{c.label}</span>
+              <div className="flex justify-between items-start mb-1">
+                <span className="stat-card-label">{c.label}</span>
+                <c.icon className={`text-lg ${c.color}`} />
+              </div>
               <span className="stat-card-value">{c.value}</span>
             </div>
           ))}
@@ -366,8 +380,8 @@ export default function SalesDashboard() {
               {!loading && <p className="text-text-subtle text-xs mt-0.5">{total} total records</p>}
             </div>
             <button id="open-sale-modal" onClick={() => setShowModal(true)}
-              className="btn-primary py-1.5 text-xs">
-              + Add Sale
+              className="btn-primary py-1.5 text-xs flex items-center gap-2">
+              <HiPlus /> Add Sale
             </button>
           </div>
 
@@ -405,7 +419,7 @@ export default function SalesDashboard() {
                       <td className="td text-text-muted text-xs">{new Date(s.saleDate).toLocaleDateString()}</td>
                       <td className="td">{s.Product?.name ?? '—'}</td>
                       <td className="td">{s.Territory?.name ?? '—'}</td>
-                      <td className="td text-accent font-semibold">${parseFloat(s.revenue).toLocaleString()}</td>
+                      <td className="td text-accent font-semibold">₹{parseFloat(s.revenue).toLocaleString()}</td>
                       <td className="td">{s.deals}</td>
                       <td className="td text-text-muted">{s.Customer?.name ?? '—'}</td>
                     </tr>
