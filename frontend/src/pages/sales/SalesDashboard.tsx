@@ -453,8 +453,8 @@ export default function SalesDashboard() {
         />
       )}
 
-      {/* ── Viewport-locked layout ─────────────────────────────────────────── */}
-      <div className="flex flex-col gap-4" style={{ height: 'calc(100vh - 140px)' }}>
+      {/* ── Dashboard Content ─────────────────────────────────────────── */}
+      <div className="flex flex-col gap-6">
 
         {/* KPI Cards — fixed height */}
         <div className="grid grid-cols-3 gap-4 flex-shrink-0 p-1 -m-1">
@@ -473,33 +473,38 @@ export default function SalesDashboard() {
           ))}
         </div>
 
-        {/* Monthly Trend Chart — fixed height */}
-        <div className="card card-hover flex-shrink-0">
-          <h3 className="text-text-primary font-semibold mb-3">Monthly Revenue Trend</h3>
-          <div className="h-36">
-            {!loading && (
-              <Line data={{
-                labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month - 1]} ${m.year}`) || [],
-                datasets: [{
-                  label: 'Revenue',
-                  data: dash?.monthlyTrend.map(m => m.revenue) || [],
-                  borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,0.1)',
-                  tension: 0.4, fill: true, pointBackgroundColor: '#eab308',
-                }],
-              }} options={{
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
-                  y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
-                },
-              }} />
-            )}
+        {/* Middle Row: Trend & Target Side-by-Side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Monthly Trend Chart */}
+          <div className="card card-hover flex flex-col">
+            <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
+              <HiTrendingUp className="text-amber-400" /> Monthly Revenue Trend
+            </h3>
+            <div className="h-64">
+              {!loading && (
+                <Line data={{
+                  labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month - 1]} ${m.year}`) || [],
+                  datasets: [{
+                    label: 'Revenue',
+                    data: dash?.monthlyTrend.map(m => m.revenue) || [],
+                    borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,0.1)',
+                    tension: 0.4, fill: true, pointBackgroundColor: '#eab308',
+                  }],
+                }} options={{
+                  responsive: true, maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                    x: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
+                    y: { ticks: { color: '#6b7280' }, grid: { color: '#1f2937' } },
+                  },
+                }} />
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* My Monthly Target */}
-        <MyMonthlyTarget />
+          {/* My Monthly Target */}
+          <MyMonthlyTarget />
+        </div>
 
         {/* Sales Records — flex-1, no external scroll */}
         <div className="card card-hover flex flex-col min-h-0 flex-1 overflow-hidden p-0">
@@ -515,8 +520,8 @@ export default function SalesDashboard() {
             </button>
           </div>
 
-          {/* Table — fixed height, NO internal scroll, exactly 5 rows */}
-          <div className="overflow-hidden">
+          {/* Table container */}
+          <div className="overflow-x-auto min-h-[300px]">
             <table className="table">
               <thead className="sticky top-0 z-10" style={{ background: '#0d1117' }}>
                 <tr>
@@ -559,8 +564,6 @@ export default function SalesDashboard() {
             </table>
           </div>
 
-          {/* Spacer — pushes pagination to the very bottom of the card */}
-          <div className="flex-1" />
 
           {/* Pagination — always pinned to bottom of card */}
           <div className="flex-shrink-0 border-t border-bg-border">

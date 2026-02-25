@@ -41,6 +41,7 @@ router.get('/sales-users', async (_req: Request, res: Response): Promise<void> =
         .select('id, firstName, lastName, userCode, email')
         .eq('roleId', salesRole.id)
         .eq('isActive', true)
+        .not('passwordHash', 'is', null) // Only onboarded users
         .order('firstName', { ascending: true });
 
     if (suError) {

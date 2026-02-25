@@ -3,7 +3,6 @@ import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
-import SalesTargetSection from './SalesTargetSection';
 import {
   HiCurrencyRupee, HiShoppingBag,
   HiLocationMarker, HiMap,
@@ -150,8 +149,6 @@ export default function ManagementDashboard() {
         </div>
       </div>
 
-      {/* Sales Target Management */}
-      <SalesTargetSection />
     </Layout>
   );
 }
