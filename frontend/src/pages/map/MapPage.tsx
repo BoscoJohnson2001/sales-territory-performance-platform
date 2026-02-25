@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
 import { getCurrentLocation, reverseGeocode } from '../../services/geolocation.service';
@@ -61,6 +62,7 @@ function pointInGeoJSONFeature(lat: number, lng: number, geometry: any): boolean
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function MapPage() {
+  const navigate = useNavigate();
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const geoLayerRef = useRef<any>(null);
@@ -403,6 +405,7 @@ export default function MapPage() {
   }, [heatmap]);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+  const showSidePanel = !!selected || (!!userCoords && !!myDistrict);
   const lvlColor = selected ? FILL[selected.revenueLevel] : '#6b7280';
 
   const GeoStatusBadge = () => {
@@ -439,10 +442,19 @@ export default function MapPage() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <button id="toggle-heatmap" onClick={() => setHeatmap(h => !h)}
-          className={heatmap ? 'btn-primary py-1.5 text-xs' : 'btn-secondary py-1.5 text-xs'}>
-          {heatmap ? '🌡️ Heatmap ON' : '🗺️ Heatmap OFF'}
-        </button>
+        <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-bg-card border border-bg-border shadow-sm transition-all hover:bg-bg-hover">
+          <span className="text-xs font-semibold text-text-muted select-none">🌡️ Heatmap</span>
+          <button
+            id="toggle-heatmap"
+            type="button"
+            onClick={() => setHeatmap(h => !h)}
+            className={`toggle-switch ${heatmap ? 'toggle-switch-on' : 'toggle-switch-off'}`}
+            aria-checked={heatmap}
+            role="switch"
+          >
+            <span className={`toggle-thumb ${heatmap ? 'toggle-thumb-on' : 'toggle-thumb-off'}`} />
+          </button>
+        </div>
 
         {/* Legend */}
         {heatmap ? (
@@ -480,7 +492,7 @@ export default function MapPage() {
 
       <div className="grid md:grid-cols-3 gap-4" style={{ height: 'calc(100vh - 230px)' }}>
         {/* Map */}
-        <div className="md:col-span-2 rounded-card overflow-hidden border border-bg-border relative" style={{ minHeight: 400 }}>
+        <div className={`${showSidePanel ? 'md:col-span-2' : 'md:col-span-3'} rounded-card overflow-hidden border border-bg-border relative`} style={{ minHeight: 400 }}>
           <div ref={mapEl} style={{ width: '100%', height: '100%' }} />
 
           {geoLoading && (
@@ -501,83 +513,96 @@ export default function MapPage() {
         </div>
 
         {/* Side panel */}
-        <div className="card flex flex-col overflow-y-auto">
-          {selected ? (
-            <>
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-text-primary font-bold text-base">{selected.displayName}</h3>
-                  <p className="text-text-muted text-xs">{selected.geoState || selected.state}</p>
-                  {myDistrict === selected.displayName && (
-                    <span className="inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: '#60a5fa22', color: '#60a5fa', border: '1px solid #60a5fa44' }}>
-                      📍 Your current district
-                    </span>
-                  )}
+        {showSidePanel && (
+          <div className="card flex flex-col overflow-y-auto">
+            {selected ? (
+              <>
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-text-primary font-bold text-base">{selected.displayName}</h3>
+                    <p className="text-text-muted text-xs">{selected.geoState || selected.state}</p>
+                    {myDistrict === selected.displayName && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-xs px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: '#60a5fa22', color: '#60a5fa', border: '1px solid #60a5fa44' }}>
+                        📍 Your current district
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => setSelected(null)}
+                    className="text-text-muted hover:text-text-primary text-xl leading-none">&times;</button>
                 </div>
-                <button onClick={() => setSelected(null)}
-                  className="text-text-muted hover:text-text-primary text-xl leading-none">&times;</button>
-              </div>
 
-              <div className="flex flex-col gap-3">
-                <div className="stat-card">
-                  <span className="stat-card-label">Total Revenue</span>
-                  <span className="stat-card-value text-xl text-accent">
-                    {selected.revenue > 0 ? `$${selected.revenue.toLocaleString()}` : '—'}
-                  </span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-card-label">Total Deals</span>
-                  <span className="stat-card-value text-xl">{selected.deals || '—'}</span>
-                </div>
-                <div className="stat-card">
-                  <span className="stat-card-label">Avg Deal Value</span>
-                  <span className="stat-card-value text-xl">
-                    {selected.deals > 0 ? `$${selected.avgDeal.toLocaleString()}` : '—'}
-                  </span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="stat-card-label">Revenue Status</span>
-                  <span className="self-start text-xs font-semibold px-2 py-1 rounded-full"
-                    style={{ backgroundColor: lvlColor + '22', color: lvlColor, border: `1px solid ${lvlColor}` }}>
-                    {LABEL[selected.revenueLevel]}
-                  </span>
-                </div>
-                {userCoords && myDistrict === selected.displayName && (
-                  <div className="flex flex-col gap-1 mt-1">
-                    <span className="stat-card-label">Your Coordinates</span>
-                    <span className="text-text-primary text-xs font-mono">
-                      {userCoords.lat.toFixed(4)}°N, {userCoords.lng.toFixed(4)}°E
+                <div className="flex flex-col gap-3">
+                  <div className="stat-card">
+                    <span className="stat-card-label">Total Revenue</span>
+                    <span className="stat-card-value text-xl text-accent">
+                      {selected.revenue > 0 ? `$${selected.revenue.toLocaleString()}` : '—'}
                     </span>
                   </div>
+                  <div className="stat-card">
+                    <span className="stat-card-label">Total Deals</span>
+                    <span className="stat-card-value text-xl">{selected.deals || '—'}</span>
+                  </div>
+                  <div className="stat-card">
+                    <span className="stat-card-label">Avg Deal Value</span>
+                    <span className="stat-card-value text-xl">
+                      {selected.deals > 0 ? `$${selected.avgDeal.toLocaleString()}` : '—'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="stat-card-label">Revenue Status</span>
+                    <span className="self-start text-xs font-semibold px-2 py-1 rounded-full"
+                      style={{ backgroundColor: lvlColor + '22', color: lvlColor, border: `1px solid ${lvlColor}` }}>
+                      {LABEL[selected.revenueLevel]}
+                    </span>
+                  </div>
+                  {userCoords && myDistrict === selected.displayName && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <span className="stat-card-label">Your Coordinates</span>
+                      <span className="text-text-primary text-xs font-mono">
+                        {userCoords.lat.toFixed(4)}°N, {userCoords.lng.toFixed(4)}°E
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-auto pt-4 border-t border-bg-border">
+                  <button
+                    id="view-territory-detail"
+                    onClick={() => navigate(`/territory-performance/${selected.id}`)}
+                    className="btn-primary w-full justify-center group"
+                  >
+                    View Performance Details
+                    <span className="group-hover:translate-x-1 transition-transform">→</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-2">
+                <span className="text-5xl">🗺️</span>
+                <p className="text-text-muted text-sm font-medium">
+                  {geoStatus === 'detecting' || geoStatus === 'geocoding'
+                    ? 'Finding your district…'
+                    : 'Click a district polygon'}
+                </p>
+                <p className="text-text-subtle text-xs">
+                  {geoStatus === 'denied' ? 'Allow location access and refresh to auto-detect'
+                    : geoStatus === 'unassigned' ? 'You are not assigned to your current district'
+                      : geoStatus === 'no_match' ? 'Your location is outside mapped territories'
+                        : heatmap ? 'Colored districts have revenue data'
+                          : 'Switch Heatmap ON to see revenue colors'}
+                </p>
+                {GEO_ENABLED && geoStatus === 'denied' && (
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="btn-secondary py-1 text-xs mt-1">
+                    🔄 Retry location
+                  </button>
                 )}
               </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-2">
-              <span className="text-5xl">🗺️</span>
-              <p className="text-text-muted text-sm font-medium">
-                {geoStatus === 'detecting' || geoStatus === 'geocoding'
-                  ? 'Finding your district…'
-                  : 'Click a district polygon'}
-              </p>
-              <p className="text-text-subtle text-xs">
-                {geoStatus === 'denied' ? 'Allow location access and refresh to auto-detect'
-                  : geoStatus === 'unassigned' ? 'You are not assigned to your current district'
-                    : geoStatus === 'no_match' ? 'Your location is outside mapped territories'
-                      : heatmap ? 'Colored districts have revenue data'
-                        : 'Switch Heatmap ON to see revenue colors'}
-              </p>
-              {GEO_ENABLED && geoStatus === 'denied' && (
-                <button
-                  onClick={() => window.location.reload()}
-                  className="btn-secondary py-1 text-xs mt-1">
-                  🔄 Retry location
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </Layout>
   );
