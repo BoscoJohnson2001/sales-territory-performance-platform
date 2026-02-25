@@ -6,7 +6,7 @@ import client from '../../api/client';
 import {
   HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
   HiPlus, HiSave, HiX, HiCheckCircle, HiExclamationCircle,
-  HiChevronLeft, HiChevronRight
+  HiChevronLeft, HiChevronRight, HiFlag,
 } from 'react-icons/hi';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -208,6 +208,133 @@ function SaleRecordModal({ products, territories, onClose, onSuccess }: SaleModa
   );
 }
 
+// ─── My Monthly Target Widget ────────────────────────────────────────────────
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const YEARS_LIST = Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 1 + i);
+
+interface PerfData {
+  targetAmount: number | null;
+  achievedRevenue: number;
+  performancePercentage: number | null;
+  status: 'EXCEEDED' | 'ACHIEVED' | 'BELOW' | 'NO_TARGET';
+}
+
+function MyMonthlyTarget() {
+  const now = new Date();
+  const [selMonth, setSelMonth] = useState(now.getMonth() + 1);
+  const [selYear, setSelYear] = useState(now.getFullYear());
+  const [perf, setPerf] = useState<PerfData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    client
+      .get(`/api/sales/my-performance?month=${selMonth}&year=${selYear}`)
+      .then(r => setPerf(r.data))
+      .catch(() => setPerf(null))
+      .finally(() => setLoading(false));
+  }, [selMonth, selYear]);
+
+  const pct = perf?.performancePercentage ?? 0;
+  const capped = Math.min(pct, 100);
+  const status = perf?.status ?? 'NO_TARGET';
+
+  const barColor =
+    status === 'EXCEEDED' ? '#60a5fa'
+      : status === 'ACHIEVED' ? '#4ade80'
+        : status === 'BELOW' ? '#f87171'
+          : '#4b5563';
+
+  const statusBadge = {
+    EXCEEDED: { text: '▲ Exceeded', bg: 'bg-blue-500/15', border: 'border-blue-500/30', color: 'text-blue-400' },
+    ACHIEVED: { text: '✓ Achieved', bg: 'bg-green-500/15', border: 'border-green-500/30', color: 'text-green-400' },
+    BELOW: { text: '✗ Below', bg: 'bg-red-500/15', border: 'border-red-500/30', color: 'text-red-400' },
+    NO_TARGET: { text: '— No Target', bg: 'bg-white/5', border: 'border-white/10', color: 'text-text-muted' },
+  }[status];
+
+  const achieved = perf?.achievedRevenue ?? 0;
+  const target = perf?.targetAmount;
+  const remaining = target !== null && target !== undefined ? Math.max(0, target - achieved) : null;
+
+  return (
+    <div className="card card-hover flex-shrink-0">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-text-primary font-semibold flex items-center gap-2">
+          <HiFlag className="text-amber-400" /> My Monthly Target
+        </h3>
+        <div className="flex items-center gap-2">
+          <select
+            className="input py-1 text-xs"
+            value={selMonth}
+            onChange={e => setSelMonth(parseInt(e.target.value))}
+          >
+            {MONTHS_SHORT.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select
+            className="input py-1 text-xs"
+            value={selYear}
+            onChange={e => setSelYear(parseInt(e.target.value))}
+          >
+            {YEARS_LIST.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-6 text-text-muted text-sm gap-2">
+          <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+          Loading…
+        </div>
+      ) : (
+        <>
+          {/* KPI mini-cards */}
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            {[
+              { label: 'Target', value: target !== null && target !== undefined ? `₹${Number(target).toLocaleString()}` : '—', color: 'text-text-primary' },
+              { label: 'Achieved', value: `₹${Number(achieved).toLocaleString()}`, color: barColor },
+              { label: 'Remaining', value: remaining !== null ? `₹${Number(remaining).toLocaleString()}` : '—', color: 'text-text-muted' },
+            ].map(c => (
+              <div key={c.label} className="rounded-lg p-3 border border-white/5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div className="text-text-subtle text-xs mb-1">{c.label}</div>
+                <div
+                  className="font-bold text-sm"
+                  style={{ color: c.color.startsWith('#') ? c.color : undefined }}
+                >
+                  <span className={c.color.startsWith('#') ? undefined : c.color}>
+                    {c.value}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-3">
+            <div className="flex justify-between text-xs text-text-muted mb-1">
+              <span>Progress</span>
+              <span>{pct > 0 ? `${pct.toFixed(1)}%` : '0%'}</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${capped}%`, background: barColor }}
+              />
+            </div>
+          </div>
+
+          {/* Status badge */}
+          <div className="flex justify-end">
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${statusBadge.bg} ${statusBadge.border} ${statusBadge.color}`}>
+              {statusBadge.text}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Pagination Controls ─────────────────────────────────────────────────────
 interface PaginationProps {
   page: number; totalPages: number; total: number;
@@ -370,6 +497,9 @@ export default function SalesDashboard() {
             )}
           </div>
         </div>
+
+        {/* My Monthly Target */}
+        <MyMonthlyTarget />
 
         {/* Sales Records — flex-1, no external scroll */}
         <div className="card card-hover flex flex-col min-h-0 flex-1 overflow-hidden p-0">
