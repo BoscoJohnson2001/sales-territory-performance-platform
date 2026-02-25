@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Layout from '../../components/Layout';
 import client from '../../api/client';
 import {
   HiUsers, HiCheckCircle, HiUserGroup, HiCollection,
-  HiPlus, HiX, HiExclamationCircle
+  HiPlus, HiX, HiExclamationCircle, HiCheck
 } from 'react-icons/hi';
 
 interface User {
@@ -23,7 +23,21 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'users' | 'products' | 'territories'>('users');
+  const [success, setSuccess] = useState(false);
 
+  // Searchable Dropdown state for assignment
+  const [salesRepSearch, setSalesRepSearch] = useState('');
+  const [salesRepDropOpen, setSalesRepDropOpen] = useState(false);
+  const salesRepDropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (salesRepDropRef.current && !salesRepDropRef.current.contains(e.target as Node))
+        setSalesRepDropOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   // Create user form state
   const [form, setForm] = useState({
     firstName: '', lastName: '', displayName: '',
@@ -324,19 +338,77 @@ export default function AdminDashboard() {
             <h3 className="text-text-primary font-semibold mb-1">Assign Territories to Sales Rep</h3>
             <p className="text-text-muted text-xs mb-4">Select a Sales Rep, check the territories to grant, then click Assign.</p>
 
-            {/* Sales User Dropdown */}
+            {/* Sales User Searchable Dropdown */}
             <label className="text-xs text-text-muted mb-1 block">Sales Representative</label>
-            <select
-              id="territory-assign-user"
-              className="input mb-4"
-              value={selectedUserId}
-              onChange={e => { setSelectedUserId(e.target.value); setAssignMsg(''); }}
-            >
-              <option value="">— Select Sales Rep —</option>
-              {salesUsers.map(u => (
-                <option key={u.id} value={u.id}>{u.userCode} — {u.firstName} {u.lastName}</option>
-              ))}
-            </select>
+            <div className="relative mb-4" ref={salesRepDropRef}>
+              <div
+                className="input cursor-pointer flex items-center justify-between"
+                onClick={() => setSalesRepDropOpen(!salesRepDropOpen)}
+              >
+                {selectedUserId ? (
+                  <span className="truncate">
+                    {salesUsers.find(u => u.id === selectedUserId)?.userCode} — {salesUsers.find(u => u.id === selectedUserId)?.firstName} {salesUsers.find(u => u.id === selectedUserId)?.lastName}
+                  </span>
+                ) : (
+                  <span className="text-text-muted">— Select Sales Rep —</span>
+                )}
+                <HiX
+                  className={`text-xs ml-2 hover:text-red-400 transition-colors ${selectedUserId ? 'visible' : 'invisible'}`}
+                  onClick={(e) => { e.stopPropagation(); setSelectedUserId(''); setSalesRepSearch(''); setAssignMsg(''); }}
+                />
+              </div>
+
+              {salesRepDropOpen && (
+                <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-bg-card border border-bg-border rounded-lg shadow-2xl overflow-hidden animate-zoom-in">
+                  <div className="p-2 border-b border-bg-border bg-bg-hover/30">
+                    <div className="relative">
+                      <HiPlus className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted text-xs rotate-45" />
+                      <input
+                        autoFocus
+                        type="text"
+                        placeholder="Filter by name or code..."
+                        className="w-full bg-bg-card border border-bg-border rounded-md pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:border-accent transition-colors"
+                        value={salesRepSearch}
+                        onChange={e => setSalesRepSearch(e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {salesUsers
+                      .filter(u =>
+                        !salesRepSearch ||
+                        u.userCode.toLowerCase().includes(salesRepSearch.toLowerCase()) ||
+                        `${u.firstName} ${u.lastName}`.toLowerCase().includes(salesRepSearch.toLowerCase())
+                      )
+                      .map(u => (
+                        <div
+                          key={u.id}
+                          className={`px-3 py-2 text-xs cursor-pointer transition-colors flex items-center justify-between group ${selectedUserId === u.id ? 'bg-accent/10 text-accent font-semibold' : 'hover:bg-bg-hover text-text-primary'}`}
+                          onClick={() => {
+                            setSelectedUserId(u.id);
+                            setSalesRepDropOpen(false);
+                            setSalesRepSearch('');
+                            setAssignMsg('');
+                          }}
+                        >
+                          <span>{u.userCode} — {u.firstName} {u.lastName}</span>
+                          {selectedUserId === u.id && <HiCheck className="text-accent" />}
+                        </div>
+                      ))}
+                    {salesUsers.filter(u =>
+                      !salesRepSearch ||
+                      u.userCode.toLowerCase().includes(salesRepSearch.toLowerCase()) ||
+                      `${u.firstName} ${u.lastName}`.toLowerCase().includes(salesRepSearch.toLowerCase())
+                    ).length === 0 && (
+                        <div className="px-3 py-4 text-center text-text-muted text-xs italic">
+                          No matches found
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Territory Multi-select (checkboxes) */}
             {selectedUserId && (

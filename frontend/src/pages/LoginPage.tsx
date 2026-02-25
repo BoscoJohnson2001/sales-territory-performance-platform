@@ -108,7 +108,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-text-subtle text-xs mt-6">
-          &copy; 2024 Pfizer Medical Industries
+          &copy; 2026 Pfizer Medical Industries
         </p>
       </div>
     </div>

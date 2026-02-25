@@ -1,6 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 
-export default function TopBar({ title, subtitle }: { title: string; subtitle?: string }) {
+export default function TopBar({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: React.ReactNode }) {
   const { user } = useAuth();
   return (
     <header className="flex items-center justify-between px-6 py-4 border-b border-bg-border bg-bg-surface">
@@ -9,6 +9,7 @@ export default function TopBar({ title, subtitle }: { title: string; subtitle?: 
         {subtitle && <p className="text-text-muted text-xs mt-0.5">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-3">
+        {actions && <div className="mr-2">{actions}</div>}
         <span className="flex items-center gap-1.5 text-xs text-text-muted">
           <span className="status-dot bg-status-high animate-pulse" /> System Online
         </span>

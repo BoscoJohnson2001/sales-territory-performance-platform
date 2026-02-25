@@ -5,7 +5,7 @@ import client from '../../api/client';
 import {
     HiArrowLeft, HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
     HiUsers, HiCube, HiUserGroup, HiPresentationChartLine,
-    HiChartBar, HiExclamationCircle
+    HiChartBar, HiExclamationCircle, HiDownload
 } from 'react-icons/hi';
 import {
     Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
@@ -86,10 +86,56 @@ export default function TerritoryDetailPage() {
     const revenueData = monthlyTrend.map(p => p.revenue);
     const dealsData = monthlyTrend.map(p => p.deals);
 
+    const handleExport = () => {
+        if (!data) return;
+
+        let csv = 'TERRITORY PERFORMANCE REPORT\n';
+        csv += `Territory,${territory.name}\n`;
+        csv += `State,${territory.state}\n`;
+        csv += `Region,${territory.region || '—'}\n`;
+        csv += `Total Revenue,${totalRevenue}\n`;
+        csv += `Total Deals,${totalDeals}\n`;
+        csv += `Avg Deal Size,${avgDealSize}\n\n`;
+
+        csv += 'MONTHLY TREND\nYear,Month,Revenue,Deals\n';
+        monthlyTrend.forEach(p => {
+            csv += `${p.year},${MONTHS[p.month - 1]},${p.revenue},${p.deals}\n`;
+        });
+
+        csv += '\nTOP PRODUCTS\nProduct,Category,Revenue\n';
+        topProducts.forEach(p => {
+            csv += `"${p.name}","${p.category}",${p.revenue}\n`;
+        });
+
+        csv += '\nTOP CUSTOMERS\nCustomer,Industry,Location,Revenue\n';
+        topCustomers.forEach(c => {
+            csv += `"${c.name}","${c.industry}","${c.location}",${c.revenue}\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `Performance_${territory.name.replace(/\s+/g, '_')}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     return (
         <Layout
             title={territory.name}
-            subtitle={`${territory.state}${territory.region ? ` · ${territory.region}` : ''} — Territory Performance`}>
+            subtitle={`${territory.state}${territory.region ? ` · ${territory.region}` : ''} — Territory Performance`}
+            actions={
+                <button
+                    onClick={handleExport}
+                    className="btn-primary py-1.5 px-4 text-xs flex items-center gap-2"
+                >
+                    <HiDownload className="text-sm" /> EXPORT CSV
+                </button>
+            }
+        >
 
             {/* Back button */}
             <button onClick={() => navigate('/territory-performance')}
