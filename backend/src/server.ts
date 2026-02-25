@@ -7,6 +7,7 @@ import salesRouter from './routes/sales';
 import mapRouter from './routes/map';
 import dashboardRouter from './routes/dashboard';
 import territoryPerfRouter from './routes/territoryPerformance';
+import managementRouter from './routes/management';
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/sales', salesRouter);
 app.use('/api/map', mapRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/territory-performance', territoryPerfRouter);
+app.use('/api/management', managementRouter);
 
 // ── 404 Handler ───────────────────────────────────────
 app.use((_req, res) => {

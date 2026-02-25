@@ -9,6 +9,7 @@ import SalesDashboard from './pages/sales/SalesDashboard';
 import MapPage from './pages/map/MapPage';
 import TerritoryPerformancePage from './pages/territory/TerritoryPerformancePage';
 import TerritoryDetailPage from './pages/territory/TerritoryDetailPage';
+import SalesTargetsPage from './pages/management/SalesTargetsPage';
 
 export default function App() {
   return (
@@ -21,6 +22,8 @@ export default function App() {
             element={<ProtectedRoute roles={['ADMIN']}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/management/dashboard"
             element={<ProtectedRoute roles={['MANAGEMENT']}><ManagementDashboard /></ProtectedRoute>} />
+          <Route path="/management/targets"
+            element={<ProtectedRoute roles={['MANAGEMENT']}><SalesTargetsPage /></ProtectedRoute>} />
           <Route path="/sales/dashboard"
             element={<ProtectedRoute roles={['SALES']}><SalesDashboard /></ProtectedRoute>} />
           <Route path="/map"

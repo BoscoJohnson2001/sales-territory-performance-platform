@@ -148,6 +148,7 @@ export default function ManagementDashboard() {
           </div>
         </div>
       </div>
+
     </Layout>
   );
 }

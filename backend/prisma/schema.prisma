@@ -42,6 +42,7 @@ model User {
   createdAt             DateTime            @default(now())
   sales                 Sale[]
   territories           SalesRepTerritory[]
+  salesTargets          SalesTarget[]
 }
 
 // ============================================================
@@ -126,6 +127,22 @@ model Invoice {
   dueDate   DateTime?
   createdAt DateTime  @default(now())
   sale      Sale      @relation(fields: [saleId], references: [id])
+}
+
+// ============================================================
+// SALESTARGET (Monthly Revenue Targets)
+// ============================================================
+model SalesTarget {
+  id           String   @id @default(uuid())
+  salesUserId  String
+  month        Int
+  year         Int
+  targetAmount Decimal  @db.Decimal(12, 2)
+  createdAt    DateTime @default(now())
+
+  salesUser    User     @relation(fields: [salesUserId], references: [id])
+
+  @@unique([salesUserId, month, year])
 }
 
 // ============================================================

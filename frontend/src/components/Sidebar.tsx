@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { HiOutlineMap, HiOutlineViewGrid, HiOutlineChartBar, HiLogout } from 'react-icons/hi';
+import { HiOutlineMap, HiOutlineViewGrid, HiOutlineChartBar, HiOutlineFlag, HiLogout } from 'react-icons/hi';
 import { IconType } from 'react-icons';
 
 const NAV: { label: string; to: string; icon: IconType; roles: string[] }[] = [
@@ -9,6 +9,7 @@ const NAV: { label: string; to: string; icon: IconType; roles: string[] }[] = [
   { label: 'Dashboard', to: '/management/dashboard', icon: HiOutlineViewGrid, roles: ['MANAGEMENT'] },
   { label: 'My Stats', to: '/sales/dashboard', icon: HiOutlineViewGrid, roles: ['SALES'] },
   { label: 'Territory Performance', to: '/territory-performance', icon: HiOutlineChartBar, roles: ['MANAGEMENT', 'SALES'] },
+  { label: 'Sales Targets', to: '/management/targets', icon: HiOutlineFlag, roles: ['MANAGEMENT'] },
 ];
 
 export default function Sidebar() {

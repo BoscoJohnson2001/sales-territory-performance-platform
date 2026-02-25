@@ -140,4 +140,49 @@ router.get('/territories', async (req: Request, res: Response): Promise<void> =>
   res.json(data || []);
 });
 
+
+// GET /api/sales/my-performance — personal month target vs achieved (SALES only)
+router.get('/my-performance', async (req: Request, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  const month = parseInt((req.query.month as string) || String(new Date().getMonth() + 1));
+  const year = parseInt((req.query.year as string) || String(new Date().getFullYear()));
+
+  // Fetch target
+  const { data: target } = await supabase
+    .from('SalesTarget')
+    .select('targetAmount')
+    .eq('salesUserId', userId)
+    .eq('month', month)
+    .eq('year', year)
+    .maybeSingle();
+
+  // Fetch achieved revenue
+  const { data: sales } = await supabase
+    .from('Sale')
+    .select('revenue')
+    .eq('salesRepId', userId)
+    .eq('month', month)
+    .eq('year', year);
+
+  const achievedRevenue = (sales || []).reduce(
+    (sum: number, s: { revenue: string }) => sum + parseFloat(s.revenue), 0
+  );
+
+  const targetAmount = target ? parseFloat(target.targetAmount) : null;
+  const performancePercentage =
+    targetAmount && targetAmount > 0
+      ? Math.round((achievedRevenue / targetAmount) * 100 * 10) / 10
+      : null;
+
+  let status: 'EXCEEDED' | 'ACHIEVED' | 'BELOW' | 'NO_TARGET' = 'NO_TARGET';
+  if (targetAmount !== null) {
+    if (achievedRevenue > targetAmount) status = 'EXCEEDED';
+    else if (achievedRevenue >= targetAmount) status = 'ACHIEVED';
+    else status = 'BELOW';
+  }
+
+  res.json({ targetAmount, achievedRevenue, performancePercentage, status, month, year });
+});
+
 export default router;
+
