@@ -13,7 +13,7 @@ import TerritoryDetailPage from './pages/territory/TerritoryDetailPage';
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter basename={(import.meta as any).env?.PROD ? '/sales-territory-performance-platform' : '/'}>
+      <BrowserRouter basename="/">
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/set-password" element={<SetPasswordPage />} />
