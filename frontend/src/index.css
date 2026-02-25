@@ -39,7 +39,8 @@ body,
   }
 
   .card-hover {
-    @apply card transition-all duration-200 hover:border-accent/30 hover:shadow-accent;
+    @apply transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-accent/40 hover:shadow-glow;
+    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .stat-card {

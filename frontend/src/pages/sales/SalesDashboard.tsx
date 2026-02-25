@@ -316,10 +316,10 @@ export default function SalesDashboard() {
       )}
 
       {/* ── Viewport-locked layout ─────────────────────────────────────────── */}
-      <div className="flex flex-col gap-4 overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
+      <div className="flex flex-col gap-4" style={{ height: 'calc(100vh - 140px)' }}>
 
         {/* KPI Cards — fixed height */}
-        <div className="grid grid-cols-3 gap-4 flex-shrink-0">
+        <div className="grid grid-cols-3 gap-4 flex-shrink-0 p-1 -m-1">
           {[
             { label: 'My Revenue', value: loading ? '—' : `$${Number(dash?.totalRevenue || 0).toLocaleString()}` },
             { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0 },
@@ -333,7 +333,7 @@ export default function SalesDashboard() {
         </div>
 
         {/* Monthly Trend Chart — fixed height */}
-        <div className="card flex-shrink-0">
+        <div className="card card-hover flex-shrink-0">
           <h3 className="text-text-primary font-semibold mb-3">Monthly Revenue Trend</h3>
           <div className="h-36">
             {!loading && (
@@ -358,7 +358,7 @@ export default function SalesDashboard() {
         </div>
 
         {/* Sales Records — flex-1, no external scroll */}
-        <div className="card flex flex-col min-h-0 flex-1 overflow-hidden p-0">
+        <div className="card card-hover flex flex-col min-h-0 flex-1 overflow-hidden p-0">
           {/* Table header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-bg-border flex-shrink-0">
             <div>
