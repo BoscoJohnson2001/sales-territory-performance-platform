@@ -8,7 +8,7 @@
 
 ## Overview
 
-A map-first sales intelligence platform providing district-level revenue visibility across the USA. Features role-based dashboards, interactive Leaflet maps with revenue color coding, and drill-down territory performance analytics.
+A map-first sales intelligence platform providing district-level revenue visibility across the India. Features role-based dashboards, interactive Leaflet maps with revenue color coding, and drill-down territory performance analytics.
 
 ## Monorepo Structure
 
