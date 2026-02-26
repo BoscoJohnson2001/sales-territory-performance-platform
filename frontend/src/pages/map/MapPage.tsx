@@ -7,9 +7,9 @@ import { useAuth } from '../../context/AuthContext';
 import {
   HiOutlineFire, HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
   HiLocationMarker, HiSearch, HiShieldCheck, HiQuestionMarkCircle,
-  HiLockClosed, HiExclamationCircle, HiCalendar, HiX, HiArrowRight, HiPlus, HiCheckCircle
+  HiLockClosed, HiExclamationCircle, HiCalendar, HiX, HiArrowRight, HiPlus, HiCheckCircle,
+  HiOutlineMap
 } from 'react-icons/hi';
-import { IconType } from 'react-icons';
 import SaleRecordModal, { Product, Territory } from '../../components/SaleRecordModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -311,8 +311,16 @@ export default function MapPage() {
               if (activeTooltipLayerRef.current === e.target) activeTooltipLayerRef.current = null;
               if (highlightRef.current !== e.target) layer.resetStyle(e.target);
             },
-            click: () => {
-              if (data) setSelected({ ...data, displayName: dispName, geoState: stateName || data.state });
+            click: (e: any) => {
+              if (data) {
+                setSelected({ ...data, displayName: dispName, geoState: stateName || data.state });
+                if (highlightRef.current && highlightRef.current !== e.target) {
+                  layer.resetStyle(highlightRef.current);
+                }
+                highlightRef.current = e.target;
+                e.target.setStyle({ weight: 3, color: '#ffffff', opacity: 1 });
+                e.target.bringToFront();
+              }
             },
           });
         },
@@ -425,9 +433,12 @@ export default function MapPage() {
       setMyDistrict(dispName);
       setGeoStatus('matched');
 
-      // Auto-open side panel
-      if (data) {
+      // Auto-open side panel and highlight
+      if (data && matchedLayer) {
         setSelected({ ...data, displayName: dispName, geoState: stateName || data.state });
+        highlightRef.current = matchedLayer;
+        matchedLayer.setStyle({ weight: 3, color: '#ffffff', opacity: 1 });
+        matchedLayer.bringToFront();
       }
       showToast(`📍 Your district: ${dispName}`, 3000);
     })();
@@ -603,7 +614,13 @@ export default function MapPage() {
                       </span>
                     )}
                   </div>
-                  <button onClick={() => setSelected(null)}
+                  <button onClick={() => {
+                    setSelected(null);
+                    if (highlightRef.current) {
+                      geoLayerRef.current?.resetStyle(highlightRef.current);
+                      highlightRef.current = null;
+                    }
+                  }}
                     className="text-text-muted hover:text-text-primary">
                     <HiX className="text-xl" />
                   </button>
