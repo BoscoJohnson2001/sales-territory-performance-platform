@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, FormEvent, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 import Layout from '../../components/Layout';
@@ -8,6 +8,7 @@ import {
   HiPlus, HiSave, HiX, HiCheckCircle, HiExclamationCircle,
   HiChevronLeft, HiChevronRight, HiFlag,
 } from 'react-icons/hi';
+import SaleRecordModal, { Product, Territory } from '../../components/SaleRecordModal';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -19,193 +20,12 @@ interface DashData {
   topCustomers: { id: string; name: string; industry: string }[];
   territories: { id: string; name: string }[];
 }
-interface Product { id: string; name: string; }
-interface Territory { id: string; name: string; }
+
 interface Sale {
   id: string; saleDate: string; revenue: string; deals: number;
   Territory?: { name: string };
   Product?: { name: string };
   Customer?: { name: string };
-}
-
-// ─── Sale Modal ─────────────────────────────────────────────────────────────
-interface SaleModalProps {
-  products: Product[];
-  territories: Territory[];
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-const emptyForm = {
-  productId: '', territoryId: '', revenue: '', deals: '',
-  quantity: '', saleDate: '', month: '', year: '',
-  customerName: '', customerIndustry: '', customerContact: '',
-};
-
-function SaleRecordModal({ products, territories, onClose, onSuccess }: SaleModalProps) {
-  const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  // Close on overlay click
-  const handleOverlay = (e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) onClose();
-  };
-
-  const f = (key: keyof typeof emptyForm) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(prev => ({ ...prev, [key]: e.target.value }));
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true); setError('');
-    try {
-      await client.post('/api/sales', {
-        ...form,
-        month: parseInt(form.month),
-        year: parseInt(form.year),
-      });
-      onSuccess();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create sale. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div
-      ref={overlayRef}
-      onClick={handleOverlay}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
-    >
-      <div className="w-full max-w-xl rounded-2xl border border-white/10 shadow-2xl"
-        style={{ background: 'rgba(15,23,42,0.97)' }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <div>
-            <h2 className="text-text-primary font-bold text-base">New Sale Record</h2>
-            <p className="text-text-subtle text-xs mt-0.5">Fill in the details to log a new sale</p>
-          </div>
-          <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors">
-            <HiX className="text-xl" />
-          </button>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={submit} className="px-6 py-5">
-          {error && (
-            <div className="mb-4 px-4 py-2.5 rounded-lg text-sm text-red-400 border border-red-500/30 flex items-center gap-2"
-              style={{ background: 'rgba(239,68,68,0.08)' }}>
-              <HiExclamationCircle className="text-lg flex-shrink-0" /> {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* Product */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Product</label>
-              <select id="modal-product" className="input" value={form.productId} onChange={f('productId')} required>
-                <option value="">Select Product</option>
-                {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-
-            {/* Territory */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Territory</label>
-              <select id="modal-territory" className="input" value={form.territoryId} onChange={f('territoryId')} required>
-                <option value="">Select Territory</option>
-                {territories.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-
-            {/* Revenue */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Revenue (₹)</label>
-              <input id="modal-revenue" className="input" placeholder="0.00" type="number" step="0.01" min="0"
-                value={form.revenue} onChange={f('revenue')} required />
-            </div>
-
-            {/* Deals */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Deals</label>
-              <input id="modal-deals" className="input" placeholder="0" type="number" min="0"
-                value={form.deals} onChange={f('deals')} required />
-            </div>
-
-            {/* Quantity */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Quantity</label>
-              <input id="modal-quantity" className="input" placeholder="0" type="number" min="0"
-                value={form.quantity} onChange={f('quantity')} required />
-            </div>
-
-            {/* Date */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Sale Date</label>
-              <input id="modal-date" className="input" type="date"
-                value={form.saleDate}
-                onChange={e => {
-                  const d = new Date(e.target.value);
-                  setForm(prev => ({
-                    ...prev, saleDate: e.target.value,
-                    month: String(d.getMonth() + 1),
-                    year: String(d.getFullYear()),
-                  }));
-                }}
-                required />
-            </div>
-
-            {/* Customer Name */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Customer Name</label>
-              <input id="modal-customer" className="input" placeholder="e.g. Apollo Hospitals"
-                value={form.customerName} onChange={f('customerName')} required />
-            </div>
-
-            {/* Industry */}
-            <div className="flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Industry</label>
-              <input id="modal-industry" className="input" placeholder="e.g. Healthcare"
-                value={form.customerIndustry} onChange={f('customerIndustry')} />
-            </div>
-
-            {/* Contact */}
-            <div className="col-span-2 flex flex-col gap-1">
-              <label className="text-text-muted text-xs font-medium uppercase tracking-wider">Contact</label>
-              <input id="modal-contact" className="input" placeholder="Phone or email"
-                value={form.customerContact} onChange={f('customerContact')} />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-white/10">
-            <button type="button" onClick={onClose} className="btn-secondary py-2 text-sm">
-              Cancel
-            </button>
-            <button id="modal-submit" type="submit" disabled={submitting} className="btn-primary py-2 text-sm flex items-center gap-2">
-              {submitting ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-black/40 border-t-black rounded-full animate-spin" />
-                  Saving…
-                </span>
-              ) : (
-                <>
-                  <HiSave className="text-base" />
-                  Save Sale
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
 }
 
 // ─── My Monthly Target Widget ────────────────────────────────────────────────
@@ -433,7 +253,7 @@ export default function SalesDashboard() {
   };
 
   return (
-    <Layout title="My Dashboard" subtitle="Personal Sales Performance & Records">
+    <Layout title="My Dashboard" subtitle="Personal Sales Performance & Records" fixedHeight={true}>
       {/* Toast */}
       {toast && (
         <div className="fixed top-4 right-4 z-[9999] max-w-xs px-4 py-3 rounded-xl text-sm text-white shadow-2xl border border-white/10 flex items-center gap-3"
@@ -454,33 +274,33 @@ export default function SalesDashboard() {
       )}
 
       {/* ── Dashboard Content ─────────────────────────────────────────── */}
-      <div className="flex flex-col gap-6">
+      <div className="flex-1 min-h-0 flex flex-col gap-6">
 
         {/* KPI Cards — fixed height */}
-        <div className="grid grid-cols-3 gap-4 flex-shrink-0 p-1 -m-1">
+        <div className="grid grid-cols-3 gap-4 flex-shrink-0">
           {[
             { label: 'My Revenue', value: loading ? '—' : `₹${Number(dash?.totalRevenue || 0).toLocaleString()}`, icon: HiCurrencyRupee, color: 'text-amber-400' },
             { label: 'Total Deals', value: loading ? '—' : dash?.totalDeals ?? 0, icon: HiShoppingBag, color: 'text-blue-400' },
             { label: 'Avg Deal Size', value: loading ? '—' : `₹${Number(dash?.averageDealSize || 0).toFixed(0)}`, icon: HiTrendingUp, color: 'text-green-400' },
           ].map(c => (
             <div key={c.label} className="stat-card card-hover">
-              <div className="flex justify-between items-start mb-1">
-                <span className="stat-card-label">{c.label}</span>
-                <c.icon className={`text-lg ${c.color}`} />
+              <span className="stat-card-label">{c.label}</span>
+              <div className="flex items-center gap-2">
+                <span className="stat-card-value text-base">{c.value}</span>
+                <c.icon className={`${c.color} text-base opacity-70`} />
               </div>
-              <span className="stat-card-value">{c.value}</span>
             </div>
           ))}
         </div>
 
         {/* Middle Row: Trend & Target Side-by-Side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0 flex-shrink-0">
           {/* Monthly Trend Chart */}
-          <div className="card card-hover flex flex-col">
-            <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
+          <div className="card card-hover flex flex-col h-64">
+            <h3 className="text-text-primary font-semibold mb-3 flex items-center gap-2">
               <HiTrendingUp className="text-amber-400" /> Monthly Revenue Trend
             </h3>
-            <div className="h-64">
+            <div className="flex-1 min-h-0">
               {!loading && (
                 <Line data={{
                   labels: dash?.monthlyTrend.map(m => `${MONTHS[m.month - 1]} ${m.year}`) || [],
@@ -509,19 +329,19 @@ export default function SalesDashboard() {
         {/* Sales Records — flex-1, no external scroll */}
         <div className="card card-hover flex flex-col min-h-0 flex-1 overflow-hidden p-0">
           {/* Table header */}
-          <div className="flex items-center justify-between px-5 py-3.5 border-b border-bg-border flex-shrink-0">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-bg-border flex-shrink-0">
             <div>
-              <h3 className="text-text-primary font-semibold">My Sales Records</h3>
-              {!loading && <p className="text-text-subtle text-xs mt-0.5">{total} total records</p>}
+              <h3 className="text-text-primary font-semibold text-sm">My Sales Records</h3>
+              {!loading && <p className="text-text-subtle text-[10px] mt-0.5">{total} total records</p>}
             </div>
             <button id="open-sale-modal" onClick={() => setShowModal(true)}
-              className="btn-primary py-1.5 text-xs flex items-center gap-2">
+              className="btn-primary py-1 text-xs flex items-center gap-2">
               <HiPlus /> Add Sale
             </button>
           </div>
 
           {/* Table container */}
-          <div className="overflow-x-auto min-h-[300px]">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <table className="table">
               <thead className="sticky top-0 z-10" style={{ background: '#0d1117' }}>
                 <tr>
@@ -551,12 +371,12 @@ export default function SalesDashboard() {
                 ) : (
                   sales.map(s => (
                     <tr key={s.id} className="tr-hover">
-                      <td className="td text-text-muted text-xs">{new Date(s.saleDate).toLocaleDateString()}</td>
-                      <td className="td">{s.Product?.name ?? '—'}</td>
-                      <td className="td">{s.Territory?.name ?? '—'}</td>
-                      <td className="td text-accent font-semibold">₹{parseFloat(s.revenue).toLocaleString()}</td>
-                      <td className="td">{s.deals}</td>
-                      <td className="td text-text-muted">{s.Customer?.name ?? '—'}</td>
+                      <td className="td text-text-muted text-[10px]">{new Date(s.saleDate).toLocaleDateString()}</td>
+                      <td className="td text-xs">{s.Product?.name ?? '—'}</td>
+                      <td className="td text-xs">{s.Territory?.name ?? '—'}</td>
+                      <td className="td text-accent font-semibold text-xs">₹{parseFloat(s.revenue).toLocaleString()}</td>
+                      <td className="td text-xs">{s.deals}</td>
+                      <td className="td text-text-muted text-xs">{s.Customer?.name ?? '—'}</td>
                     </tr>
                   ))
                 )}

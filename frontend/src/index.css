@@ -44,20 +44,17 @@ body,
   }
 
   .stat-card {
-    @apply card flex flex-col gap-1;
+    @apply bg-bg-card border border-bg-border rounded-card px-4 py-3 shadow-card flex flex-row items-center justify-between gap-3;
   }
 
   .stat-card-label {
-    @apply text-text-muted text-xs font-medium uppercase tracking-widest;
+    @apply text-text-muted text-[10px] font-bold uppercase tracking-widest truncate;
   }
 
   .stat-card-value {
-    @apply text-text-primary text-2xl font-bold;
+    @apply text-text-primary text-base font-bold whitespace-nowrap;
   }
 
-  .stat-card-sub {
-    @apply text-text-subtle text-xs;
-  }
 
   .btn {
     @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-btn text-sm font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-base disabled:opacity-50 disabled:cursor-not-allowed;

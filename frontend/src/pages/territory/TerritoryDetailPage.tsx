@@ -5,13 +5,13 @@ import client from '../../api/client';
 import {
     HiArrowLeft, HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
     HiUsers, HiCube, HiUserGroup, HiPresentationChartLine,
-    HiChartBar, HiExclamationCircle, HiDownload
+    HiExclamationCircle, HiDownload
 } from 'react-icons/hi';
 import {
     Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
     BarElement, Title, Tooltip, Legend,
 } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
+import { Line } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
@@ -84,7 +84,6 @@ export default function TerritoryDetailPage() {
     // Chart data
     const chartLabels = monthlyTrend.map(p => `${MONTHS[p.month - 1]} ${p.year}`);
     const revenueData = monthlyTrend.map(p => p.revenue);
-    const dealsData = monthlyTrend.map(p => p.deals);
 
     const handleExport = () => {
         if (!data) return;
@@ -126,178 +125,120 @@ export default function TerritoryDetailPage() {
     return (
         <Layout
             title={territory.name}
-            subtitle={`${territory.state}${territory.region ? ` · ${territory.region}` : ''} — Territory Performance`}
+            subtitle={`${territory.state}${territory.region ? ` · ${territory.region}` : ''} — Performance Detail`}
             actions={
-                <button
-                    onClick={handleExport}
-                    className="btn-primary py-1.5 px-4 text-xs flex items-center gap-2"
-                >
-                    <HiDownload className="text-sm" /> EXPORT CSV
+                <button onClick={handleExport} className="btn-primary py-1 px-4 text-xs flex items-center gap-2">
+                    <HiDownload /> EXPORT CSV
                 </button>
             }
+            fixedHeight={true}
         >
-
-            {/* Back button */}
-            <button onClick={() => navigate('/territory-performance')}
-                className="btn-secondary text-xs py-1.5 mb-5 inline-flex items-center gap-2">
-                <HiArrowLeft /> Back to Territories
-            </button>
-
-            {/* KPI Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <div className="stat-card">
-                    <div className="flex justify-between items-start mb-1">
-                        <span className="stat-card-label">Total Revenue</span>
-                        <HiCurrencyRupee className="text-lg text-amber-400" />
-                    </div>
-                    <span className="stat-card-value text-accent">{totalRevenue > 0 ? fmt(totalRevenue) : '—'}</span>
-                    <span className="stat-card-sub">Across all periods</span>
-                </div>
-                <div className="stat-card">
-                    <div className="flex justify-between items-start mb-1">
-                        <span className="stat-card-label">Total Deals</span>
-                        <HiShoppingBag className="text-lg text-blue-400" />
-                    </div>
-                    <span className="stat-card-value">{totalDeals || '—'}</span>
-                    <span className="stat-card-sub">Closed deals</span>
-                </div>
-                <div className="stat-card">
-                    <div className="flex justify-between items-start mb-1">
-                        <span className="stat-card-label">Avg Deal Size</span>
-                        <HiTrendingUp className="text-lg text-green-400" />
-                    </div>
-                    <span className="stat-card-value">{avgDealSize > 0 ? fmt(avgDealSize) : '—'}</span>
-                    <span className="stat-card-sub">Revenue ÷ Deals</span>
-                </div>
-            </div>
-
-            <div className="grid lg:grid-cols-3 gap-5">
-
-                {/* Monthly Revenue Trend */}
-                <div className="lg:col-span-2 card">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
-                        <HiPresentationChartLine className="text-amber-400" /> Monthly Revenue Trend
-                    </h3>
-                    {monthlyTrend.length > 0 ? (
-                        <div style={{ height: 220 }}>
-                            <Line
-                                data={{
-                                    labels: chartLabels,
-                                    datasets: [{
-                                        data: revenueData,
-                                        borderColor: '#eab308', backgroundColor: '#eab30820',
-                                        fill: true, tension: 0.4, pointRadius: 4,
-                                        pointBackgroundColor: '#eab308',
-                                    }],
-                                }}
-                                options={chartOpts}
-                            />
+            <div className="flex-1 min-h-0 flex flex-col gap-6">
+                {/* KPI Row */}
+                <div className="grid grid-cols-3 gap-4 flex-shrink-0">
+                    <div className="stat-card card-hover">
+                        <span className="stat-card-label">Revenue</span>
+                        <div className="flex items-center gap-2">
+                            <span className="stat-card-value text-base">{fmt(totalRevenue)}</span>
+                            <HiCurrencyRupee className="text-amber-400 opacity-70" />
                         </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-[220px] text-text-subtle text-sm">No sales data yet</div>
-                    )}
+                    </div>
+                    <div className="stat-card card-hover">
+                        <span className="stat-card-label">Deals</span>
+                        <div className="flex items-center gap-2">
+                            <span className="stat-card-value text-base">{totalDeals}</span>
+                            <HiShoppingBag className="text-blue-400 opacity-70" />
+                        </div>
+                    </div>
+                    <div className="stat-card card-hover">
+                        <span className="stat-card-label">Avg Size</span>
+                        <div className="flex items-center gap-2">
+                            <span className="stat-card-value text-base">{fmt(avgDealSize)}</span>
+                            <HiTrendingUp className="text-green-400 opacity-70" />
+                        </div>
+                    </div>
                 </div>
 
-                {/* Assigned Sales Reps */}
-                <div className="card flex flex-col">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
-                        <HiUsers className="text-blue-400" /> Assigned Sales Reps
-                    </h3>
-                    {assignedReps.length > 0 ? (
-                        <div className="flex flex-col gap-2">
-                            {assignedReps.map(rep => (
-                                <div key={rep.id} className="flex items-center gap-3 p-2.5 bg-bg-hover rounded-lg border border-bg-border">
-                                    <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-accent text-sm font-bold flex-shrink-0">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
+                    {/* Monthly Trend Chart */}
+                    <div className="card flex flex-col min-h-0 h-64">
+                        <h3 className="text-text-primary text-[11px] font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <HiPresentationChartLine className="text-amber-400" /> Revenue Trend
+                        </h3>
+                        <div className="flex-1 min-h-0">
+                            {monthlyTrend.length > 0 ? (
+                                <Line
+                                    data={{
+                                        labels: chartLabels,
+                                        datasets: [{
+                                            data: revenueData,
+                                            borderColor: '#eab308', backgroundColor: 'rgba(234,179,8,0.1)',
+                                            fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#eab308',
+                                        }],
+                                    }}
+                                    options={{ ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, ticks: { ...chartOpts.scales.y.ticks, font: { size: 9 } } } } }}
+                                />
+                            ) : <div className="flex items-center justify-center h-full text-text-subtle text-[10px] italic">No trend data available</div>}
+                        </div>
+                    </div>
+
+                    {/* Assigned Sales Reps */}
+                    <div className="card flex flex-col min-h-0 h-64">
+                        <h3 className="text-text-primary text-[11px] font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <HiUsers className="text-blue-400" /> Assigned Representatives
+                        </h3>
+                        <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+                            {assignedReps.length > 0 ? assignedReps.map(rep => (
+                                <div key={rep.id} className="flex items-center gap-3 p-2 bg-bg-base/30 rounded-lg border border-bg-border">
+                                    <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xs font-bold">
                                         {rep.displayName.charAt(0)}
                                     </div>
                                     <div>
-                                        <p className="text-text-primary text-xs font-semibold">{rep.displayName}</p>
-                                        <p className="text-text-subtle text-[10px]">{rep.userCode}</p>
+                                        <p className="text-text-primary text-[11px] font-bold">{rep.displayName}</p>
+                                        <p className="text-text-subtle text-[9px]">{rep.userCode}</p>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center text-text-subtle text-xs text-center">
-                            No sales reps assigned to this territory
-                        </div>
-                    )}
-                </div>
-
-                {/* Deals Trend */}
-                {monthlyTrend.length > 0 && (
-                    <div className="card">
-                        <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
-                            <HiChartBar className="text-blue-400" /> Monthly Deals Volume
-                        </h3>
-                        <div style={{ height: 180 }}>
-                            <Bar
-                                data={{
-                                    labels: chartLabels,
-                                    datasets: [{
-                                        data: dealsData,
-                                        backgroundColor: '#3b82f640',
-                                        borderColor: '#3b82f6',
-                                        borderWidth: 1,
-                                        borderRadius: 4,
-                                    }],
-                                }}
-                                options={{
-                                    ...chartOpts,
-                                    scales: {
-                                        ...chartOpts.scales,
-                                        y: { ...chartOpts.scales.y, ticks: { ...chartOpts.scales.y.ticks, callback: (v: any) => v } },
-                                    },
-                                }}
-                            />
+                            )) : <div className="flex items-center justify-center h-full text-text-subtle text-[10px] italic">No reps assigned</div>}
                         </div>
                     </div>
-                )}
-
-                {/* Top Products */}
-                <div className="card">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
-                        <HiCube className="text-green-400" /> Top Products
-                    </h3>
-                    {topProducts.length > 0 ? (
-                        <div className="flex flex-col gap-2">
-                            {topProducts.map((p, i) => (
-                                <div key={p.id} className="flex items-center gap-3">
-                                    <span className="text-text-subtle text-xs w-4">{i + 1}.</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-text-primary text-xs font-medium truncate">{p.name}</p>
-                                        <p className="text-text-subtle text-[10px]">{p.category}</p>
-                                    </div>
-                                    <span className="text-accent text-xs font-semibold">{fmt(p.revenue)}</span>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-text-subtle text-xs">No product data available</p>
-                    )}
                 </div>
 
-                {/* Top Customers */}
-                <div className="card">
-                    <h3 className="text-text-primary text-sm font-semibold mb-4 flex items-center gap-2">
-                        <HiUserGroup className="text-indigo-400" /> Top Customers
-                    </h3>
-                    {topCustomers.length > 0 ? (
-                        <div className="flex flex-col gap-2">
-                            {topCustomers.map((c, i) => (
-                                <div key={c.id} className="flex items-center gap-3">
-                                    <span className="text-text-subtle text-xs w-4">{i + 1}.</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-text-primary text-xs font-medium truncate">{c.name}</p>
-                                        <p className="text-text-subtle text-[10px] truncate">{c.industry}{c.location ? ` · ${c.location}` : ''}</p>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+                    {/* Top Products */}
+                    <div className="card flex flex-col min-h-0">
+                        <h3 className="text-text-primary text-[11px] font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <HiCube className="text-green-400" /> Top Performing Products
+                        </h3>
+                        <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+                            {topProducts.length > 0 ? topProducts.map((p) => (
+                                <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-bg-base/20 border border-bg-border/50">
+                                    <div className="min-w-0">
+                                        <p className="text-[11px] font-medium text-text-primary truncate">{p.name}</p>
+                                        <p className="text-[9px] text-text-subtle">{p.category}</p>
                                     </div>
-                                    <span className="text-accent text-xs font-semibold">{fmt(c.revenue)}</span>
+                                    <span className="text-accent text-[11px] font-bold">{fmt(p.revenue)}</span>
                                 </div>
-                            ))}
+                            )) : <p className="text-text-subtle text-[10px] italic">No product data</p>}
                         </div>
-                    ) : (
-                        <p className="text-text-subtle text-xs">No customer data available</p>
-                    )}
+                    </div>
+
+                    {/* Top Customers */}
+                    <div className="card flex flex-col min-h-0">
+                        <h3 className="text-text-primary text-[11px] font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <HiUserGroup className="text-indigo-400" /> Strategic Customers
+                        </h3>
+                        <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+                            {topCustomers.length > 0 ? topCustomers.map((c) => (
+                                <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-bg-base/20 border border-bg-border/50">
+                                    <div className="min-w-0">
+                                        <p className="text-[11px] font-medium text-text-primary truncate">{c.name}</p>
+                                        <p className="text-[9px] text-text-subtle truncate">{c.industry} · {c.location}</p>
+                                    </div>
+                                    <span className="text-accent text-[11px] font-bold">{fmt(c.revenue)}</span>
+                                </div>
+                            )) : <p className="text-text-subtle text-[10px] italic">No customer data</p>}
+                        </div>
+                    </div>
                 </div>
             </div>
         </Layout>

@@ -7,9 +7,10 @@ import { useAuth } from '../../context/AuthContext';
 import {
   HiOutlineFire, HiCurrencyRupee, HiShoppingBag, HiTrendingUp,
   HiLocationMarker, HiSearch, HiShieldCheck, HiQuestionMarkCircle,
-  HiLockClosed, HiExclamationCircle, HiCalendar, HiX, HiArrowRight
+  HiLockClosed, HiExclamationCircle, HiCalendar, HiX, HiArrowRight, HiPlus, HiCheckCircle
 } from 'react-icons/hi';
 import { IconType } from 'react-icons';
+import SaleRecordModal, { Product, Territory } from '../../components/SaleRecordModal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface TerritoryData {
@@ -101,6 +102,12 @@ export default function MapPage() {
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [myDistrict, setMyDistrict] = useState<string | null>(null); // matched district name
 
+  // Sale Modal state
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [territories, setTerritories] = useState<Territory[]>([]);
+  const [toast, setToast] = useState('');
+
   const showToast = useCallback((msg: string, dur = 4000) => {
     setGeoToast(msg);
     setTimeout(() => setGeoToast(null), dur);
@@ -145,6 +152,26 @@ export default function MapPage() {
       setApiReady(true);
     }).catch(() => setApiReady(true));
   }, [selectedMonth]);
+
+  // Fetch products and territories for Sale Modal (Sales role only)
+  useEffect(() => {
+    if (user?.role === 'SALES') {
+      Promise.all([
+        client.get('/api/sales/products').catch(() => ({ data: [] })),
+        client.get('/api/sales/territories').catch(() => ({ data: [] })),
+      ]).then(([pr, tr]) => {
+        setProducts(pr.data);
+        setTerritories(tr.data);
+      });
+    }
+  }, [user]);
+
+  const handleSaleSuccess = () => {
+    setShowSaleModal(false);
+    setToast('✅ Sale recorded successfully!');
+    setTimeout(() => setToast(''), 4000);
+    // Optionally refresh map data here if needed, but usually not necessary for a single sale record
+  };
 
   // ── Step 2: Init Leaflet map ────────────────────────────────────────────────
   useEffect(() => {
@@ -453,11 +480,27 @@ export default function MapPage() {
   return (
     <Layout title="Territory Map" subtitle="India District Revenue Choropleth — click a district for details">
       {/* Toast */}
-      {geoToast && (
+      {(geoToast || toast) && (
         <div className="fixed top-4 right-4 z-[9999] max-w-xs px-4 py-3 rounded-xl text-sm text-white shadow-2xl backdrop-blur-md border border-white/10 animate-fade-in"
           style={{ background: 'rgba(15,23,42,0.95)' }}>
-          {geoToast}
+          {toast ? (
+            <div className="flex items-center gap-3">
+              {toast.startsWith('✅') ? <HiCheckCircle className="text-green-400 text-lg flex-shrink-0" /> : <HiExclamationCircle className="text-red-400 text-lg flex-shrink-0" />}
+              <span>{toast.replace(/^[✅❌]/, '').trim()}</span>
+            </div>
+          ) : geoToast}
         </div>
+      )}
+
+      {/* Sale Modal */}
+      {showSaleModal && (
+        <SaleRecordModal
+          products={products}
+          territories={territories}
+          initialTerritoryId={selected?.id}
+          onClose={() => setShowSaleModal(false)}
+          onSuccess={handleSaleSuccess}
+        />
       )}
 
       {/* Toolbar */}
@@ -566,35 +609,36 @@ export default function MapPage() {
                   </button>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   <div className="stat-card">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="stat-card-label">Total Revenue</span>
-                      <HiCurrencyRupee className="text-lg text-amber-400" />
+                    <span className="stat-card-label">Total Revenue</span>
+                    <div className="flex items-center gap-2">
+                      <span className="stat-card-value">
+                        {selected.revenue > 0 ? `₹${selected.revenue.toLocaleString()}` : '—'}
+                      </span>
+                      <HiCurrencyRupee className="text-base text-amber-400 opacity-70" />
                     </div>
-                    <span className="stat-card-value text-xl text-accent">
-                      {selected.revenue > 0 ? `₹${selected.revenue.toLocaleString()}` : '—'}
-                    </span>
                   </div>
                   <div className="stat-card">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="stat-card-label">Total Deals</span>
-                      <HiShoppingBag className="text-lg text-blue-400" />
+                    <span className="stat-card-label">Total Deals</span>
+                    <div className="flex items-center gap-2">
+                      <span className="stat-card-value">{selected.deals || '—'}</span>
+                      <HiShoppingBag className="text-base text-blue-400 opacity-70" />
                     </div>
-                    <span className="stat-card-value text-xl">{selected.deals || '—'}</span>
                   </div>
                   <div className="stat-card">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="stat-card-label">Avg Deal Value</span>
-                      <HiTrendingUp className="text-lg text-green-400" />
+                    <span className="stat-card-label">Avg Deal Value</span>
+                    <div className="flex items-center gap-2">
+                      <span className="stat-card-value">
+                        {selected.deals > 0 ? `₹${selected.avgDeal.toLocaleString()}` : '—'}
+                      </span>
+                      <HiTrendingUp className="text-base text-green-400 opacity-70" />
                     </div>
-                    <span className="stat-card-value text-xl">
-                      {selected.deals > 0 ? `₹${selected.avgDeal.toLocaleString()}` : '—'}
-                    </span>
                   </div>
-                  <div className="flex flex-col gap-1">
+
+                  <div className="stat-card">
                     <span className="stat-card-label">Revenue Status</span>
-                    <span className="self-start text-xs font-semibold px-2 py-1 rounded-full"
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: lvlColor + '22', color: lvlColor, border: `1px solid ${lvlColor}` }}>
                       {LABEL[selected.revenueLevel]}
                     </span>
@@ -610,14 +654,24 @@ export default function MapPage() {
                 </div>
 
                 {user?.role !== 'ADMIN' && (
-                  <div className="mt-auto pt-4 border-t border-bg-border">
+                  <div className="mt-auto pt-4 border-t border-bg-border flex flex-row gap-2">
+                    {user?.role === 'SALES' && (
+                      <button
+                        id="add-sale-on-map"
+                        onClick={() => setShowSaleModal(true)}
+                        className="btn-primary flex-1 justify-center flex items-center gap-1.5 px-2 text-xs"
+                      >
+                        <HiPlus className="text-sm" />
+                        Add Sale
+                      </button>
+                    )}
                     <button
                       id="view-territory-detail"
                       onClick={() => navigate(`/territory-performance/${selected.id}`)}
-                      className="btn-primary w-full justify-center group flex items-center gap-2"
+                      className="btn-secondary flex-1 justify-center group flex items-center gap-1.5 px-2 text-xs text-center"
                     >
-                      View Performance Details
-                      <HiArrowRight className="group-hover:translate-x-1 transition-transform" />
+                      Performance
+                      <HiArrowRight className="group-hover:translate-x-1 transition-transform text-sm" />
                     </button>
                   </div>
                 )}
