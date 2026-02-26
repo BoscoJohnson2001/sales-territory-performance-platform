@@ -1,7 +1,7 @@
 # Sales Territory Performance & Revenue Hotspot Mapping Platform
 
 **Organization:** Pfizer Medical Industries  
-**Geography:** United States — District-Wise  
+**Geography:** India — District-Wise  
 **Type:** Demo-Level Strategic Intelligence Platform
 
 ---
